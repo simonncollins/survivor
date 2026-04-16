@@ -107,6 +107,81 @@ window.addEventListener('resize', function() {
 });
 resizeCanvas();
 
+// --------------- Sound Manager (Web Audio API) (#28) ---------------
+const Sound = (function() {
+    let audioCtx = null;
+    let muted = false;
+
+    function ensureContext() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        return audioCtx;
+    }
+
+    function playTone(freq, duration, type, volume, freqEnd) {
+        if (muted) return;
+        const ctx = ensureContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type || 'sine';
+        osc.frequency.setValueAtTime(freq + (Math.random() - 0.5) * freq * 0.08, ctx.currentTime);
+        if (freqEnd !== undefined) {
+            osc.frequency.linearRampToValueAtTime(freqEnd, ctx.currentTime + duration);
+        }
+        gain.gain.setValueAtTime(volume || 0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + duration);
+    }
+
+    return {
+        init: function() { ensureContext(); },
+        isMuted: function() { return muted; },
+        toggleMute: function() { muted = !muted; return muted; },
+
+        playAttack: function() {
+            playTone(800, 0.08, 'square', 0.1, 400);
+        },
+        playEnemyDeath: function() {
+            playTone(300, 0.12, 'square', 0.12, 80);
+            playTone(200, 0.08, 'sawtooth', 0.06, 60);
+        },
+        playXpPickup: function() {
+            playTone(1200, 0.06, 'sine', 0.08, 1600);
+        },
+        playLevelUp: function() {
+            if (muted) return;
+            const ctx = ensureContext();
+            const notes = [523, 659, 784, 1047];
+            notes.forEach(function(freq, i) {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.1);
+                gain.gain.setValueAtTime(0.12, ctx.currentTime + i * 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.1 + 0.2);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + i * 0.1);
+                osc.stop(ctx.currentTime + i * 0.1 + 0.2);
+            });
+        },
+        playChestOpen: function() {
+            playTone(400, 0.15, 'sine', 0.12, 900);
+            playTone(600, 0.2, 'sine', 0.08, 1200);
+        },
+        playDamage: function() {
+            playTone(150, 0.15, 'sawtooth', 0.12, 80);
+        },
+    };
+})();
+
 // --------------- Utility / Collision Helpers (#8) ---------------
 function circleDistance(a, b) {
     const dx = a.x - b.x;
@@ -494,6 +569,7 @@ function findNearestEnemy(fromX, fromY, excludeId) {
 
 function fireMagicBolt() {
     if (enemies.length === 0) return;
+    Sound.playAttack();
     const target = findNearestEnemy(player.x, player.y);
     if (!target) return;
     const dir = normalize(target.x - player.x, target.y - player.y);
@@ -538,6 +614,7 @@ function firePiercingBolt() {
 
 function fireBouncingSpark() {
     if (enemies.length === 0) return;
+    Sound.playAttack();
     const target = findNearestEnemy(player.x, player.y);
     if (!target) return;
     const dir = normalize(target.x - player.x, target.y - player.y);
@@ -678,6 +755,7 @@ let isDragging = false;
 
 function handleGameClick(screenX, screenY) {
     if (game.state === 'MENU') {
+        Sound.init();
         game.state = 'PLAYING';
         game.lastTime = performance.now();
         updateCamera();
@@ -685,6 +763,7 @@ function handleGameClick(screenX, screenY) {
     }
 
     if (game.state === 'GAME_OVER') {
+        Sound.init();
         setHighScore(game.survivalTime);
         resetGameState();
         game.state = 'PLAYING';
@@ -866,6 +945,7 @@ function update(dt) {
         if (circlesOverlap(player, enemy)) {
             if (now >= player.invincibleUntil) {
                 player.hp -= contactDamage;
+                Sound.playDamage();
                 triggerScreenShake();
                 if (player.hp <= 0) {
                     player.hp = 0;
@@ -958,6 +1038,7 @@ function update(dt) {
                 p.hitEnemies.add(enemy.id);
 
                 if (enemy.hp <= 0) {
+                    Sound.playEnemyDeath();
                     spawnXpGem(enemy.x, enemy.y, enemy.xpDrop);
                     spawnDeathParticles(enemy.x, enemy.y, enemy.color);
                     const enemyIdx = enemies.indexOf(enemy);
@@ -1021,10 +1102,12 @@ function update(dt) {
             if (player.xp >= threshold) {
                 player.xp -= threshold;
                 player.level++;
+                Sound.playLevelUp();
                 game.state = 'PAUSED_LEVELUP';
                 generateLevelUpCards();
             }
 
+            Sound.playXpPickup();
             xpGems.splice(i, 1);
         }
     }
