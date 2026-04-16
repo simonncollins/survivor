@@ -87,6 +87,38 @@ const XP_BURST_COUNT = 3;
 const SHAKE_MAGNITUDE = 8;
 const SHAKE_DURATION = 0.3;
 
+// XP Magnet powerup (#26)
+const XP_MAGNET_RANGE_PER_LEVEL = 60;
+
+// AoE Explosion powerup (#26)
+const AOE_EXPLOSION_BASE_RADIUS = 50;
+const AOE_EXPLOSION_BASE_DAMAGE = 10;
+const AOE_EXPLOSION_RADIUS_PER_LEVEL = 15;
+const AOE_EXPLOSION_DAMAGE_PER_LEVEL = 5;
+const AOE_EXPLOSION_COLOR = '#ff8800';
+
+// Pulsing Aura powerup (#26)
+const AURA_BASE_RADIUS = 80;
+const AURA_BASE_DAMAGE = 8;
+const AURA_BASE_COOLDOWN = 1.5;
+const AURA_RADIUS_PER_LEVEL = 20;
+const AURA_DAMAGE_PER_LEVEL = 4;
+const AURA_COLOR = '#ff44aa';
+
+// Beam/Laser weapon (#26)
+const BEAM_BASE_DAMAGE = 12;
+const BEAM_DAMAGE_PER_LEVEL = 6;
+const BEAM_TICK_INTERVAL = 0.15;
+const BEAM_RANGE = 300;
+const BEAM_COLOR = '#ff2222';
+
+// Armor (#26)
+const ARMOR_REDUCTION_PER_LEVEL = 0.10;
+const ARMOR_MAX_REDUCTION = 0.70;
+
+// Health Regen (#26)
+const REGEN_HP_PER_SECOND_PER_LEVEL = 0.33;
+
 // --------------- Canvas Setup ---------------
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -291,6 +323,60 @@ const POWERUPS = [
             }
         },
     },
+    {
+        name: 'XP Magnet',
+        description: '+60 XP gem pull range',
+        color: '#ffff44',
+        apply: function() {
+            player.xpMagnetLevel++;
+        },
+    },
+    {
+        name: 'Explosive Shots',
+        description: 'Projectiles explode on impact',
+        color: AOE_EXPLOSION_COLOR,
+        apply: function() {
+            player.aoeExplosionLevel++;
+        },
+    },
+    {
+        name: 'Pulsing Aura',
+        description: 'Damages nearby enemies periodically',
+        color: AURA_COLOR,
+        apply: function() {
+            player.auraLevel++;
+            if (!player.weapons.includes('pulsing_aura')) {
+                player.weapons.push('pulsing_aura');
+            }
+        },
+    },
+    {
+        name: 'Death Beam',
+        description: 'Fires a beam at the nearest enemy',
+        color: BEAM_COLOR,
+        apply: function() {
+            player.beamLevel++;
+            if (!player.weapons.includes('beam_laser')) {
+                player.weapons.push('beam_laser');
+            }
+        },
+    },
+    {
+        name: 'Armor',
+        description: '-10% incoming damage',
+        color: '#8888aa',
+        apply: function() {
+            player.armorLevel++;
+        },
+    },
+    {
+        name: 'Regeneration',
+        description: 'Slowly restores HP over time',
+        color: '#44ff88',
+        apply: function() {
+            player.regenLevel++;
+        },
+    },
 ];
 
 // --------------- Game State ---------------
@@ -315,6 +401,9 @@ function resetGameState() {
             bouncing_spark: 0,
         },
         orbitAngle: 0,
+        auraPulseTime: 0,
+        beamTarget: null,
+        beamFlash: 0,
     };
 
     player = {
@@ -334,12 +423,20 @@ function resetGameState() {
         damageMultiplier: 1,
         fireRateMultiplier: 1,
         weapons: ['magic_bolt'],
+        // New powerup stats (#26)
+        xpMagnetLevel: 0,
+        aoeExplosionLevel: 0,
+        auraLevel: 0,
+        beamLevel: 0,
+        armorLevel: 0,
+        regenLevel: 0,
     };
 
     enemies = [];
     projectiles = [];
     xpGems = [];
     particles = [];
+    explosions = [];
     levelUpCards = [];
     selectedPowerupIndex = -1;
     levelUpOpenTime = 0;
@@ -419,6 +516,18 @@ function spawnDeathParticles(x, y, color) {
             color: color,
         });
     }
+}
+
+// Explosion visual effect (#26)
+let explosions = [];
+function spawnExplosion(x, y, radius) {
+    explosions.push({
+        x: x, y: y,
+        maxRadius: radius,
+        currentRadius: 0,
+        lifetime: 0.3,
+        timer: 0.3,
+    });
 }
 
 function spawnXpBurst(x, y) {
@@ -894,7 +1003,8 @@ function update(dt) {
         const enemy = enemies[idx];
         if (circlesOverlap(player, enemy)) {
             if (now >= player.invincibleUntil) {
-                player.hp -= contactDamage;
+                const armorReduction = Math.min(player.armorLevel * ARMOR_REDUCTION_PER_LEVEL, ARMOR_MAX_REDUCTION);
+                player.hp -= contactDamage * (1 - armorReduction);
                 triggerScreenShake();
                 if (player.hp <= 0) {
                     player.hp = 0;
@@ -959,6 +1069,64 @@ function update(dt) {
         }
     }
 
+    // Pulsing Aura (#26)
+    if (player.weapons.includes('pulsing_aura')) {
+        if (!game.weaponTimers.pulsing_aura) game.weaponTimers.pulsing_aura = 0;
+        game.weaponTimers.pulsing_aura -= dt;
+        if (game.weaponTimers.pulsing_aura <= 0) {
+            const auraRadius = AURA_BASE_RADIUS + (player.auraLevel - 1) * AURA_RADIUS_PER_LEVEL;
+            const auraDamage = (AURA_BASE_DAMAGE + (player.auraLevel - 1) * AURA_DAMAGE_PER_LEVEL) * player.damageMultiplier;
+            game.weaponTimers.pulsing_aura = AURA_BASE_COOLDOWN / player.fireRateMultiplier;
+            game.auraPulseTime = 0.4; // visual pulse duration
+            const nearbyAura = queryNearby(enemyGrid, player.x, player.y, auraRadius);
+            for (const idx of nearbyAura) {
+                const enemy = enemies[idx];
+                if (!enemy) continue;
+                const dist = Math.sqrt((enemy.x - player.x) ** 2 + (enemy.y - player.y) ** 2);
+                if (dist <= auraRadius) {
+                    enemy.hp -= auraDamage;
+                    enemy.flashTimer = 0.05;
+                    spawnDamageNumber(enemy.x, enemy.y - enemy.radius, auraDamage);
+                }
+            }
+        }
+    }
+
+    // Beam/Laser (#26)
+    if (player.weapons.includes('beam_laser')) {
+        if (!game.weaponTimers.beam_laser) game.weaponTimers.beam_laser = 0;
+        game.weaponTimers.beam_laser -= dt;
+        if (game.weaponTimers.beam_laser <= 0) {
+            game.weaponTimers.beam_laser = BEAM_TICK_INTERVAL / player.fireRateMultiplier;
+            const beamTarget = findNearestEnemy(player.x, player.y);
+            if (beamTarget) {
+                const dist = Math.sqrt((beamTarget.x - player.x) ** 2 + (beamTarget.y - player.y) ** 2);
+                if (dist <= BEAM_RANGE) {
+                    const beamDamage = (BEAM_BASE_DAMAGE + (player.beamLevel - 1) * BEAM_DAMAGE_PER_LEVEL) * player.damageMultiplier;
+                    beamTarget.hp -= beamDamage;
+                    beamTarget.flashTimer = 0.05;
+                    spawnDamageNumber(beamTarget.x, beamTarget.y - beamTarget.radius, beamDamage);
+                    game.beamTarget = { x: beamTarget.x, y: beamTarget.y };
+                    game.beamFlash = 0.1;
+                } else {
+                    game.beamTarget = null;
+                }
+            } else {
+                game.beamTarget = null;
+            }
+        }
+        if (game.beamFlash > 0) game.beamFlash -= dt;
+    }
+
+    // Health Regeneration (#26)
+    if (player.regenLevel > 0) {
+        const regenRate = player.regenLevel * REGEN_HP_PER_SECOND_PER_LEVEL;
+        player.hp = Math.min(player.hp + regenRate * dt, player.maxHp);
+    }
+
+    // Aura pulse visual timer
+    if (game.auraPulseTime > 0) game.auraPulseTime -= dt;
+
     // Update projectiles (#5)
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
@@ -985,6 +1153,24 @@ function update(dt) {
                 enemy.flashTimer = 0.05;
                 spawnDamageNumber(enemy.x, enemy.y - enemy.radius, p.damage);
                 p.hitEnemies.add(enemy.id);
+
+                // AoE explosion (#26)
+                if (player.aoeExplosionLevel > 0) {
+                    const aoeRadius = AOE_EXPLOSION_BASE_RADIUS + (player.aoeExplosionLevel - 1) * AOE_EXPLOSION_RADIUS_PER_LEVEL;
+                    const aoeDamage = (AOE_EXPLOSION_BASE_DAMAGE + (player.aoeExplosionLevel - 1) * AOE_EXPLOSION_DAMAGE_PER_LEVEL) * player.damageMultiplier;
+                    spawnExplosion(enemy.x, enemy.y, aoeRadius);
+                    const nearbyAoe = queryNearby(enemyGrid, enemy.x, enemy.y, aoeRadius);
+                    for (const aoeIdx of nearbyAoe) {
+                        const aoeEnemy = enemies[aoeIdx];
+                        if (!aoeEnemy || aoeEnemy === enemy) continue;
+                        const dist = Math.sqrt((aoeEnemy.x - enemy.x) ** 2 + (aoeEnemy.y - enemy.y) ** 2);
+                        if (dist <= aoeRadius) {
+                            aoeEnemy.hp -= aoeDamage;
+                            aoeEnemy.flashTimer = 0.05;
+                            spawnDamageNumber(aoeEnemy.x, aoeEnemy.y - aoeEnemy.radius, aoeDamage);
+                        }
+                    }
+                }
 
                 if (enemy.hp <= 0) {
                     spawnXpGem(enemy.x, enemy.y, enemy.xpDrop);
@@ -1036,7 +1222,8 @@ function update(dt) {
         const gem = xpGems[i];
         const d = circleDistance(player, gem);
 
-        if (d < XP_GEM_MAGNET_RANGE) {
+        const effectiveMagnetRange = XP_GEM_MAGNET_RANGE + (player.xpMagnetLevel * XP_MAGNET_RANGE_PER_LEVEL);
+        if (d < effectiveMagnetRange) {
             const dir = normalize(player.x - gem.x, player.y - gem.y);
             gem.x += dir.x * XP_GEM_MAGNET_SPEED * dt;
             gem.y += dir.y * XP_GEM_MAGNET_SPEED * dt;
@@ -1055,6 +1242,16 @@ function update(dt) {
             }
 
             xpGems.splice(i, 1);
+        }
+    }
+
+    // Update explosions (#26)
+    for (let i = explosions.length - 1; i >= 0; i--) {
+        const exp = explosions[i];
+        exp.timer -= dt;
+        exp.currentRadius = exp.maxRadius * (1 - exp.timer / exp.lifetime);
+        if (exp.timer <= 0) {
+            explosions.splice(i, 1);
         }
     }
 
@@ -1149,6 +1346,75 @@ function render() {
             ctx.arc(sp.x, sp.y, ORBIT_ORB_RADIUS, 0, Math.PI * 2);
             ctx.fill();
         }
+    }
+
+    // XP Magnet range indicator (#26)
+    if (player.xpMagnetLevel > 0) {
+        const magnetRange = XP_GEM_MAGNET_RANGE + (player.xpMagnetLevel * XP_MAGNET_RANGE_PER_LEVEL);
+        ctx.strokeStyle = 'rgba(255, 255, 68, 0.15)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(player.x - game.camera.x, player.y - game.camera.y, magnetRange, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    // Pulsing Aura visual (#26)
+    if (player.weapons.includes('pulsing_aura')) {
+        const auraRadius = AURA_BASE_RADIUS + (player.auraLevel - 1) * AURA_RADIUS_PER_LEVEL;
+        const pulseAlpha = game.auraPulseTime > 0 ? 0.35 * (game.auraPulseTime / 0.4) : 0.08;
+        ctx.strokeStyle = 'rgba(255, 68, 170, ' + pulseAlpha + ')';
+        ctx.lineWidth = game.auraPulseTime > 0 ? 3 : 1;
+        ctx.beginPath();
+        ctx.arc(player.x - game.camera.x, player.y - game.camera.y, auraRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        if (game.auraPulseTime > 0) {
+            ctx.fillStyle = 'rgba(255, 68, 170, ' + (pulseAlpha * 0.3) + ')';
+            ctx.beginPath();
+            ctx.arc(player.x - game.camera.x, player.y - game.camera.y, auraRadius * (1 - game.auraPulseTime / 0.4), 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // Beam visual (#26)
+    if (player.weapons.includes('beam_laser') && game.beamTarget && game.beamFlash > 0) {
+        const beamWidth = 2 + player.beamLevel;
+        const alpha = game.beamFlash / 0.1;
+        ctx.strokeStyle = 'rgba(255, 34, 34, ' + alpha + ')';
+        ctx.lineWidth = beamWidth;
+        ctx.beginPath();
+        ctx.moveTo(player.x - game.camera.x, player.y - game.camera.y);
+        ctx.lineTo(game.beamTarget.x - game.camera.x, game.beamTarget.y - game.camera.y);
+        ctx.stroke();
+        // Glow
+        ctx.strokeStyle = 'rgba(255, 100, 100, ' + (alpha * 0.4) + ')';
+        ctx.lineWidth = beamWidth + 4;
+        ctx.beginPath();
+        ctx.moveTo(player.x - game.camera.x, player.y - game.camera.y);
+        ctx.lineTo(game.beamTarget.x - game.camera.x, game.beamTarget.y - game.camera.y);
+        ctx.stroke();
+    }
+
+    // Explosions (#26)
+    for (const exp of explosions) {
+        const alpha = exp.timer / exp.lifetime;
+        ctx.strokeStyle = 'rgba(255, 136, 0, ' + alpha + ')';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(exp.x - game.camera.x, exp.y - game.camera.y, exp.currentRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255, 136, 0, ' + (alpha * 0.15) + ')';
+        ctx.beginPath();
+        ctx.arc(exp.x - game.camera.x, exp.y - game.camera.y, exp.currentRadius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Armor indicator (#26)
+    if (player.armorLevel > 0) {
+        ctx.strokeStyle = 'rgba(136, 136, 170, 0.4)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(player.x - game.camera.x, player.y - game.camera.y, player.radius + 4, 0, Math.PI * 2);
+        ctx.stroke();
     }
 
     // Draw player with pulse (#17)
