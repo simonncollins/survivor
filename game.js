@@ -295,6 +295,8 @@ const POWERUPS = [
 
 // --------------- Game State ---------------
 let game, player, enemies, projectiles, xpGems, particles, levelUpCards;
+let selectedPowerupIndex = -1;
+let levelUpOpenTime = 0;
 let enemyIdCounter = 0;
 
 function resetGameState() {
@@ -339,6 +341,8 @@ function resetGameState() {
     xpGems = [];
     particles = [];
     levelUpCards = [];
+    selectedPowerupIndex = -1;
+    levelUpOpenTime = 0;
     enemyIdCounter = 0;
 }
 
@@ -580,6 +584,8 @@ function spawnXpGem(x, y, value) {
 // --------------- Level Up Cards (#10) ---------------
 function generateLevelUpCards() {
     levelUpCards = [];
+    selectedPowerupIndex = -1;
+    levelUpOpenTime = performance.now();
 
     if (isPortrait) {
         // Portrait/mobile: stack cards vertically with smaller dimensions
@@ -623,6 +629,8 @@ function generateLevelUpCards() {
 
 function generateLevelUpCardsFromPowerups(powerups) {
     levelUpCards = [];
+    selectedPowerupIndex = -1;
+    levelUpOpenTime = performance.now();
 
     if (isPortrait) {
         const cardW = Math.min(CARD_WIDTH, canvas.width * 0.7);
@@ -661,12 +669,33 @@ function generateLevelUpCardsFromPowerups(powerups) {
 }
 
 function handleLevelUpClick(clickX, clickY) {
-    for (const card of levelUpCards) {
-        if (clickX >= card.x && clickX <= card.x + card.width &&
-            clickY >= card.y && clickY <= card.y + card.height) {
-            card.powerup.apply();
+    // Guard against stray clicks when level-up just opened (200ms)
+    if (performance.now() - levelUpOpenTime < 200) return false;
+
+    // Check if confirm button was clicked
+    if (selectedPowerupIndex >= 0) {
+        const small = canvas.width < 600;
+        const btnW = small ? 140 : 180;
+        const btnH = small ? 36 : 44;
+        const lastCard = levelUpCards[levelUpCards.length - 1];
+        const btnX = canvas.width / 2 - btnW / 2;
+        const btnY = lastCard.y + lastCard.height + (small ? 16 : 24);
+        if (clickX >= btnX && clickX <= btnX + btnW &&
+            clickY >= btnY && clickY <= btnY + btnH) {
+            levelUpCards[selectedPowerupIndex].powerup.apply();
             game.state = 'PLAYING';
             levelUpCards = [];
+            selectedPowerupIndex = -1;
+            return true;
+        }
+    }
+
+    // Check if a card was clicked (select it)
+    for (let i = 0; i < levelUpCards.length; i++) {
+        const card = levelUpCards[i];
+        if (clickX >= card.x && clickX <= card.x + card.width &&
+            clickY >= card.y && clickY <= card.y + card.height) {
+            selectedPowerupIndex = i;
             return true;
         }
     }
@@ -1264,13 +1293,21 @@ function renderLevelUpScreen() {
     ctx.font = (small ? 14 : 20) + 'px sans-serif';
     ctx.fillText('Level ' + player.level + ' \u2014 Choose a powerup:', canvas.width / 2, cardsY - (small ? 6 : 10));
 
-    for (const card of levelUpCards) {
-        ctx.fillStyle = card.hovered ? '#333333' : '#222222';
+    for (let i = 0; i < levelUpCards.length; i++) {
+        const card = levelUpCards[i];
+        const isSelected = (i === selectedPowerupIndex);
+
+        ctx.fillStyle = isSelected ? '#2a2a44' : (card.hovered ? '#333333' : '#222222');
         ctx.fillRect(card.x, card.y, card.width, card.height);
 
-        ctx.strokeStyle = card.hovered ? card.powerup.color : '#555555';
-        ctx.lineWidth = card.hovered ? 3 : 1;
+        if (isSelected) {
+            ctx.shadowColor = card.powerup.color;
+            ctx.shadowBlur = 16;
+        }
+        ctx.strokeStyle = isSelected ? card.powerup.color : (card.hovered ? card.powerup.color : '#555555');
+        ctx.lineWidth = isSelected ? 3 : (card.hovered ? 3 : 1);
         ctx.strokeRect(card.x, card.y, card.width, card.height);
+        ctx.shadowBlur = 0;
 
         const iconRadius = small ? 16 : 25;
         const iconY = small ? card.y + card.height * 0.3 : card.y + 60;
@@ -1305,6 +1342,52 @@ function renderLevelUpScreen() {
         }
         if (line) {
             ctx.fillText(line, card.x + card.width / 2, lineY);
+        }
+    }
+
+    // Confirm button (only shown when a card is selected)
+    if (selectedPowerupIndex >= 0) {
+        const btnW = small ? 140 : 180;
+        const btnH = small ? 36 : 44;
+        const lastCard = levelUpCards[levelUpCards.length - 1];
+        const btnX = canvas.width / 2 - btnW / 2;
+        const btnY = lastCard.y + lastCard.height + (small ? 16 : 24);
+
+        // Button background
+        const selectedColor = levelUpCards[selectedPowerupIndex].powerup.color;
+        ctx.fillStyle = selectedColor;
+        ctx.shadowColor = selectedColor;
+        ctx.shadowBlur = 12;
+        // Rounded rectangle for confirm button
+        const r = 8;
+        ctx.beginPath();
+        ctx.moveTo(btnX + r, btnY);
+        ctx.lineTo(btnX + btnW - r, btnY);
+        ctx.arcTo(btnX + btnW, btnY, btnX + btnW, btnY + r, r);
+        ctx.lineTo(btnX + btnW, btnY + btnH - r);
+        ctx.arcTo(btnX + btnW, btnY + btnH, btnX + btnW - r, btnY + btnH, r);
+        ctx.lineTo(btnX + r, btnY + btnH);
+        ctx.arcTo(btnX, btnY + btnH, btnX, btnY + btnH - r, r);
+        ctx.lineTo(btnX, btnY + r);
+        ctx.arcTo(btnX, btnY, btnX + r, btnY, r);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Button text
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold ' + (small ? 16 : 20) + 'px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('CONFIRM', canvas.width / 2, btnY + btnH / 2 + (small ? 5 : 7));
+    } else {
+        // Hint text when no card is selected
+        const lastCard = levelUpCards[levelUpCards.length - 1];
+        if (lastCard) {
+            const hintY = lastCard.y + lastCard.height + (small ? 24 : 36);
+            ctx.fillStyle = '#666666';
+            ctx.font = (small ? 12 : 14) + 'px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Click a powerup to select, then confirm', canvas.width / 2, hintY);
         }
     }
 }
