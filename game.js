@@ -91,11 +91,20 @@ const SHAKE_DURATION = 0.3;
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+let isPortrait = false;
+
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    isPortrait = window.innerWidth < window.innerHeight;
 }
-window.addEventListener('resize', resizeCanvas);
+window.addEventListener('resize', function() {
+    resizeCanvas();
+    if (game && game.state === 'PAUSED_LEVELUP' && levelUpCards.length > 0) {
+        var savedPowerups = levelUpCards.map(function(c) { return c.powerup; });
+        generateLevelUpCardsFromPowerups(savedPowerups);
+    }
+});
 resizeCanvas();
 
 // --------------- Utility / Collision Helpers (#8) ---------------
@@ -571,20 +580,83 @@ function spawnXpGem(x, y, value) {
 // --------------- Level Up Cards (#10) ---------------
 function generateLevelUpCards() {
     levelUpCards = [];
-    const totalWidth = CARD_COUNT * CARD_WIDTH + (CARD_COUNT - 1) * CARD_GAP;
-    const startX = (canvas.width - totalWidth) / 2;
-    const startY = (canvas.height - CARD_HEIGHT) / 2;
 
-    for (let i = 0; i < CARD_COUNT; i++) {
-        const powerup = POWERUPS[Math.floor(Math.random() * POWERUPS.length)];
-        levelUpCards.push({
-            x: startX + i * (CARD_WIDTH + CARD_GAP),
-            y: startY,
-            width: CARD_WIDTH,
-            height: CARD_HEIGHT,
-            powerup: powerup,
-            hovered: false,
-        });
+    if (isPortrait) {
+        // Portrait/mobile: stack cards vertically with smaller dimensions
+        const cardW = Math.min(CARD_WIDTH, canvas.width * 0.7);
+        const cardH = Math.min(160, (canvas.height - 160) / CARD_COUNT - 12);
+        const gap = 12;
+        const totalHeight = CARD_COUNT * cardH + (CARD_COUNT - 1) * gap;
+        const startX = (canvas.width - cardW) / 2;
+        const startY = (canvas.height - totalHeight) / 2 + 30;
+
+        for (let i = 0; i < CARD_COUNT; i++) {
+            const powerup = POWERUPS[Math.floor(Math.random() * POWERUPS.length)];
+            levelUpCards.push({
+                x: startX,
+                y: startY + i * (cardH + gap),
+                width: cardW,
+                height: cardH,
+                powerup: powerup,
+                hovered: false,
+            });
+        }
+    } else {
+        // Landscape/desktop: horizontal row
+        const totalWidth = CARD_COUNT * CARD_WIDTH + (CARD_COUNT - 1) * CARD_GAP;
+        const startX = (canvas.width - totalWidth) / 2;
+        const startY = (canvas.height - CARD_HEIGHT) / 2;
+
+        for (let i = 0; i < CARD_COUNT; i++) {
+            const powerup = POWERUPS[Math.floor(Math.random() * POWERUPS.length)];
+            levelUpCards.push({
+                x: startX + i * (CARD_WIDTH + CARD_GAP),
+                y: startY,
+                width: CARD_WIDTH,
+                height: CARD_HEIGHT,
+                powerup: powerup,
+                hovered: false,
+            });
+        }
+    }
+}
+
+function generateLevelUpCardsFromPowerups(powerups) {
+    levelUpCards = [];
+
+    if (isPortrait) {
+        const cardW = Math.min(CARD_WIDTH, canvas.width * 0.7);
+        const cardH = Math.min(160, (canvas.height - 160) / CARD_COUNT - 12);
+        const gap = 12;
+        const totalHeight = CARD_COUNT * cardH + (CARD_COUNT - 1) * gap;
+        const startX = (canvas.width - cardW) / 2;
+        const startY = (canvas.height - totalHeight) / 2 + 30;
+
+        for (let i = 0; i < powerups.length; i++) {
+            levelUpCards.push({
+                x: startX,
+                y: startY + i * (cardH + gap),
+                width: cardW,
+                height: cardH,
+                powerup: powerups[i],
+                hovered: false,
+            });
+        }
+    } else {
+        const totalWidth = CARD_COUNT * CARD_WIDTH + (CARD_COUNT - 1) * CARD_GAP;
+        const startX = (canvas.width - totalWidth) / 2;
+        const startY = (canvas.height - CARD_HEIGHT) / 2;
+
+        for (let i = 0; i < powerups.length; i++) {
+            levelUpCards.push({
+                x: startX + i * (CARD_WIDTH + CARD_GAP),
+                y: startY,
+                width: CARD_WIDTH,
+                height: CARD_HEIGHT,
+                powerup: powerups[i],
+                hovered: false,
+            });
+        }
     }
 }
 
@@ -1036,25 +1108,31 @@ function renderMenuScreen() {
     ctx.fillStyle = '#111111';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    const small = canvas.width < 600;
+    const titleSize = small ? 48 : 80;
+    const subSize = small ? 18 : 24;
+    const hintSize = small ? 13 : 16;
+    const hsSize = small ? 14 : 18;
+
     ctx.fillStyle = '#4488ff';
-    ctx.font = 'bold 80px sans-serif';
+    ctx.font = 'bold ' + titleSize + 'px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('SURVIVOR', canvas.width / 2, canvas.height / 2 - 60);
 
     ctx.fillStyle = '#888888';
-    ctx.font = '24px sans-serif';
-    ctx.fillText('Click to Play', canvas.width / 2, canvas.height / 2 + 10);
+    ctx.font = subSize + 'px sans-serif';
+    ctx.fillText(small ? 'Tap to Play' : 'Click to Play', canvas.width / 2, canvas.height / 2 + 10);
 
     const hs = getHighScore();
     if (hs > 0) {
         ctx.fillStyle = '#ffdd44';
-        ctx.font = '18px sans-serif';
+        ctx.font = hsSize + 'px sans-serif';
         ctx.fillText('Best Time: ' + formatTime(hs), canvas.width / 2, canvas.height / 2 + 60);
     }
 
     ctx.fillStyle = '#555555';
-    ctx.font = '16px sans-serif';
-    ctx.fillText('Click to move \u2022 Auto-fire weapons \u2022 Survive!', canvas.width / 2, canvas.height / 2 + 120);
+    ctx.font = hintSize + 'px sans-serif';
+    ctx.fillText(small ? 'Tap to move \u2022 Auto-fire \u2022 Survive!' : 'Click to move \u2022 Auto-fire weapons \u2022 Survive!', canvas.width / 2, canvas.height / 2 + 120);
 }
 
 // --------------- Game Over Screen (#15) ---------------
@@ -1062,33 +1140,44 @@ function renderGameOverScreen() {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    const small = canvas.width < 600;
+    const titleSize = small ? 40 : 64;
+    const statsSize = small ? 16 : 24;
+    const recordSize = small ? 16 : 20;
+    const hintSize = small ? 14 : 18;
+
     ctx.fillStyle = '#ff4444';
-    ctx.font = 'bold 64px sans-serif';
+    ctx.font = 'bold ' + titleSize + 'px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 60);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '24px sans-serif';
-    ctx.fillText(
-        'Survived: ' + formatTime(game.survivalTime) + '  |  Kills: ' + game.killCount + '  |  Level: ' + player.level,
-        canvas.width / 2, canvas.height / 2
-    );
+    ctx.font = statsSize + 'px sans-serif';
+    if (small) {
+        ctx.fillText('Survived: ' + formatTime(game.survivalTime), canvas.width / 2, canvas.height / 2 - 10);
+        ctx.fillText('Kills: ' + game.killCount + '  |  Level: ' + player.level, canvas.width / 2, canvas.height / 2 + 14);
+    } else {
+        ctx.fillText(
+            'Survived: ' + formatTime(game.survivalTime) + '  |  Kills: ' + game.killCount + '  |  Level: ' + player.level,
+            canvas.width / 2, canvas.height / 2
+        );
+    }
 
     const hs = getHighScore();
     const isNewRecord = game.survivalTime >= hs;
     if (isNewRecord) {
         ctx.fillStyle = '#ffdd44';
-        ctx.font = 'bold 20px sans-serif';
+        ctx.font = 'bold ' + recordSize + 'px sans-serif';
         ctx.fillText('NEW RECORD!', canvas.width / 2, canvas.height / 2 + 40);
     } else if (hs > 0) {
         ctx.fillStyle = '#888888';
-        ctx.font = '18px sans-serif';
+        ctx.font = hintSize + 'px sans-serif';
         ctx.fillText('Best Time: ' + formatTime(hs), canvas.width / 2, canvas.height / 2 + 40);
     }
 
     ctx.fillStyle = '#888888';
-    ctx.font = '18px sans-serif';
-    ctx.fillText('Click to Play Again', canvas.width / 2, canvas.height / 2 + 80);
+    ctx.font = hintSize + 'px sans-serif';
+    ctx.fillText(small ? 'Tap to Play Again' : 'Click to Play Again', canvas.width / 2, canvas.height / 2 + 80);
 }
 
 // --------------- Level Up Screen (#10) ---------------
@@ -1096,16 +1185,17 @@ function renderLevelUpScreen() {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    const small = canvas.width < 600;
     const cardsY = levelUpCards.length > 0 ? levelUpCards[0].y : canvas.height / 2;
 
     ctx.fillStyle = '#ffdd44';
-    ctx.font = 'bold 48px sans-serif';
+    ctx.font = 'bold ' + (small ? 32 : 48) + 'px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('LEVEL UP!', canvas.width / 2, cardsY - 40);
+    ctx.fillText('LEVEL UP!', canvas.width / 2, cardsY - (small ? 24 : 40));
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '20px sans-serif';
-    ctx.fillText('Level ' + player.level + ' \u2014 Choose a powerup:', canvas.width / 2, cardsY - 10);
+    ctx.font = (small ? 14 : 20) + 'px sans-serif';
+    ctx.fillText('Level ' + player.level + ' \u2014 Choose a powerup:', canvas.width / 2, cardsY - (small ? 6 : 10));
 
     for (const card of levelUpCards) {
         ctx.fillStyle = card.hovered ? '#333333' : '#222222';
@@ -1115,27 +1205,33 @@ function renderLevelUpScreen() {
         ctx.lineWidth = card.hovered ? 3 : 1;
         ctx.strokeRect(card.x, card.y, card.width, card.height);
 
+        const iconRadius = small ? 16 : 25;
+        const iconY = small ? card.y + card.height * 0.3 : card.y + 60;
         ctx.fillStyle = card.powerup.color;
         ctx.beginPath();
-        ctx.arc(card.x + card.width / 2, card.y + 60, 25, 0, Math.PI * 2);
+        ctx.arc(card.x + card.width / 2, iconY, iconRadius, 0, Math.PI * 2);
         ctx.fill();
 
+        const nameSize = small ? 14 : 18;
+        const descSize = small ? 11 : 14;
+        const nameY = small ? iconY + iconRadius + 16 : card.y + 120;
+
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 18px sans-serif';
+        ctx.font = 'bold ' + nameSize + 'px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(card.powerup.name, card.x + card.width / 2, card.y + 120);
+        ctx.fillText(card.powerup.name, card.x + card.width / 2, nameY);
 
         ctx.fillStyle = '#aaaaaa';
-        ctx.font = '14px sans-serif';
+        ctx.font = descSize + 'px sans-serif';
         const words = card.powerup.description.split(' ');
         let line = '';
-        let lineY = card.y + 150;
+        let lineY = nameY + (small ? 16 : 30);
         for (const word of words) {
             const testLine = line + (line ? ' ' : '') + word;
             if (ctx.measureText(testLine).width > card.width - 20) {
                 ctx.fillText(line, card.x + card.width / 2, lineY);
                 line = word;
-                lineY += 18;
+                lineY += small ? 14 : 18;
             } else {
                 line = testLine;
             }
@@ -1150,11 +1246,13 @@ function renderLevelUpScreen() {
 function renderHUD() {
     ctx.save();
 
+    const small = canvas.width < 600;
+
     // Health bar (top-left)
-    const hbX = 20;
-    const hbY = 20;
-    const hbWidth = 200;
-    const hbHeight = 20;
+    const hbX = small ? 10 : 20;
+    const hbY = small ? 10 : 20;
+    const hbWidth = small ? 120 : 200;
+    const hbHeight = small ? 14 : 20;
     const hpRatio = player.hp / player.maxHp;
 
     ctx.fillStyle = '#661111';
@@ -1166,27 +1264,27 @@ function renderHUD() {
     ctx.strokeRect(hbX, hbY, hbWidth, hbHeight);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '12px sans-serif';
+    ctx.font = (small ? 10 : 12) + 'px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(Math.ceil(player.hp) + ' / ' + player.maxHp, hbX + hbWidth / 2, hbY + 15);
+    ctx.fillText(Math.ceil(player.hp) + ' / ' + player.maxHp, hbX + hbWidth / 2, hbY + (small ? 11 : 15));
 
     // Timer (top-center)
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 24px sans-serif';
+    ctx.font = 'bold ' + (small ? 18 : 24) + 'px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(formatTime(game.survivalTime), canvas.width / 2, 38);
+    ctx.fillText(formatTime(game.survivalTime), canvas.width / 2, small ? 26 : 38);
 
     // Kill count (top-right)
     ctx.fillStyle = '#ff8888';
-    ctx.font = '16px sans-serif';
+    ctx.font = (small ? 12 : 16) + 'px sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText('Kills: ' + game.killCount, canvas.width - 20, 35);
+    ctx.fillText('Kills: ' + game.killCount, canvas.width - (small ? 10 : 20), small ? 24 : 35);
 
     // XP bar (bottom-center)
-    const xpBarWidth = 300;
-    const xpBarHeight = 16;
+    const xpBarWidth = small ? Math.min(200, canvas.width - 40) : 300;
+    const xpBarHeight = small ? 12 : 16;
     const xpBarX = (canvas.width - xpBarWidth) / 2;
-    const xpBarY = canvas.height - 40;
+    const xpBarY = canvas.height - (small ? 30 : 40);
     const xpThreshold = getXpThreshold(player.level);
     const xpRatio = Math.min(player.xp / xpThreshold, 1);
 
@@ -1199,9 +1297,9 @@ function renderHUD() {
     ctx.strokeRect(xpBarX, xpBarY, xpBarWidth, xpBarHeight);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '14px sans-serif';
+    ctx.font = (small ? 11 : 14) + 'px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Level ' + player.level, canvas.width / 2, xpBarY - 6);
+    ctx.fillText('Level ' + player.level, canvas.width / 2, xpBarY - (small ? 4 : 6));
 
     ctx.restore();
 }
