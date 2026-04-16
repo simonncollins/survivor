@@ -674,6 +674,8 @@ function handleLevelUpClick(clickX, clickY) {
 }
 
 // --------------- Input ---------------
+let isDragging = false;
+
 function handleGameClick(screenX, screenY) {
     if (game.state === 'MENU') {
         game.state = 'PLAYING';
@@ -705,29 +707,94 @@ function handleGameClick(screenX, screenY) {
     }
 }
 
-canvas.addEventListener('click', function(e) {
+// --- Mouse events ---
+canvas.addEventListener('mousedown', function(e) {
     const rect = canvas.getBoundingClientRect();
-    handleGameClick(e.clientX - rect.left, e.clientY - rect.top);
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+
+    if (game.state === 'MENU' || game.state === 'GAME_OVER' || game.state === 'PAUSED_LEVELUP') {
+        handleGameClick(sx, sy);
+        return;
+    }
+
+    if (game.state === 'PLAYING') {
+        isDragging = true;
+        const worldX = sx + game.camera.x;
+        const worldY = sy + game.camera.y;
+        player.targetX = worldX;
+        player.targetY = worldY;
+        player.moving = true;
+    }
 });
 
-// Mobile touch support (#18)
+canvas.addEventListener('mousemove', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    // Hover detection for level-up cards
+    if (game.state === 'PAUSED_LEVELUP') {
+        for (const card of levelUpCards) {
+            card.hovered = mx >= card.x && mx <= card.x + card.width &&
+                           my >= card.y && my <= card.y + card.height;
+        }
+    }
+
+    // Drag-to-move: update target while dragging
+    if (isDragging && game.state === 'PLAYING') {
+        const worldX = mx + game.camera.x;
+        const worldY = my + game.camera.y;
+        player.targetX = worldX;
+        player.targetY = worldY;
+        player.moving = true;
+    }
+});
+
+canvas.addEventListener('mouseup', function() {
+    isDragging = false;
+});
+
+// --- Touch events (#18, #24) ---
 canvas.addEventListener('touchstart', function(e) {
     e.preventDefault();
     const rect = canvas.getBoundingClientRect();
     const touch = e.touches[0];
-    handleGameClick(touch.clientX - rect.left, touch.clientY - rect.top);
+    const sx = touch.clientX - rect.left;
+    const sy = touch.clientY - rect.top;
+
+    if (game.state === 'MENU' || game.state === 'GAME_OVER' || game.state === 'PAUSED_LEVELUP') {
+        handleGameClick(sx, sy);
+        return;
+    }
+
+    if (game.state === 'PLAYING') {
+        isDragging = true;
+        const worldX = sx + game.camera.x;
+        const worldY = sy + game.camera.y;
+        player.targetX = worldX;
+        player.targetY = worldY;
+        player.moving = true;
+    }
 }, { passive: false });
 
-canvas.addEventListener('mousemove', function(e) {
-    if (game.state !== 'PAUSED_LEVELUP') return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    for (const card of levelUpCards) {
-        card.hovered = mx >= card.x && mx <= card.x + card.width &&
-                       my >= card.y && my <= card.y + card.height;
+canvas.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+    if (isDragging && game.state === 'PLAYING') {
+        const rect = canvas.getBoundingClientRect();
+        const touch = e.touches[0];
+        const worldX = (touch.clientX - rect.left) + game.camera.x;
+        const worldY = (touch.clientY - rect.top) + game.camera.y;
+        player.targetX = worldX;
+        player.targetY = worldY;
+        player.moving = true;
     }
-});
+}, { passive: false });
+
+canvas.addEventListener('touchend', function(e) {
+    e.preventDefault();
+    isDragging = false;
+}, { passive: false });
 
 // --------------- Update ---------------
 function update(dt) {
