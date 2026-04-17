@@ -953,8 +953,6 @@ function spawnChest() {
     const dist = CHEST_SPAWN_DIST_MIN + Math.random() * (CHEST_SPAWN_DIST_MAX - CHEST_SPAWN_DIST_MIN);
     let cx = player.x + Math.cos(angle) * dist;
     let cy = player.y + Math.sin(angle) * dist;
-    cx = Math.max(CHEST_WIDTH, Math.min(WORLD_WIDTH - CHEST_WIDTH, cx));
-    cy = Math.max(CHEST_HEIGHT, Math.min(WORLD_HEIGHT - CHEST_HEIGHT, cy));
     chests.push({ x: cx, y: cy, width: CHEST_WIDTH, height: CHEST_HEIGHT });
 }
 
