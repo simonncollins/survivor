@@ -3,8 +3,7 @@
 // ============================================================
 
 // --------------- Constants ---------------
-const WORLD_WIDTH = 3000;
-const WORLD_HEIGHT = 3000;
+// WORLD_WIDTH/WORLD_HEIGHT removed — world is infinite (issue #30)
 const PLAYER_RADIUS = 16;
 const PLAYER_COLOR = '#4488ff';
 const PLAYER_SPEED = 200;
@@ -410,13 +409,13 @@ function resetGameState() {
     };
 
     player = {
-        x: WORLD_WIDTH / 2,
-        y: WORLD_HEIGHT / 2,
+        x: 0,
+        y: 0,
         radius: PLAYER_RADIUS,
         speed: PLAYER_SPEED,
         color: PLAYER_COLOR,
-        targetX: WORLD_WIDTH / 2,
-        targetY: WORLD_HEIGHT / 2,
+        targetX: 0,
+        targetY: 0,
         moving: false,
         hp: PLAYER_MAX_HP,
         maxHp: PLAYER_MAX_HP,
@@ -551,8 +550,6 @@ function spawnEnemy() {
         case 3: x = camX - ENEMY_SPAWN_MARGIN; y = camY + Math.random() * canvas.height; break;
     }
 
-    x = Math.max(ENEMY_RADIUS, Math.min(WORLD_WIDTH - ENEMY_RADIUS, x));
-    y = Math.max(ENEMY_RADIUS, Math.min(WORLD_HEIGHT - ENEMY_RADIUS, y));
 
     const t = game.survivalTime;
     const hp = getScaledValue(ENEMY_BASE_HP, t, 60);
@@ -1080,8 +1077,6 @@ function update(dt) {
             }
         }
 
-        player.x = Math.max(player.radius, Math.min(WORLD_WIDTH - player.radius, player.x));
-        player.y = Math.max(player.radius, Math.min(WORLD_HEIGHT - player.radius, player.y));
     }
 
     // Enemy spawning (#3) with scaling (#12)
