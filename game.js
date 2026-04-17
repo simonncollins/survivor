@@ -766,7 +766,7 @@ function generateLevelUpCards() {
     if (isPortrait) {
         // Portrait/mobile: stack cards vertically with smaller dimensions
         const cardW = Math.min(CARD_WIDTH, canvas.width * 0.7);
-        const cardH = Math.min(160, (canvas.height - 160) / CARD_COUNT - 12);
+        const cardH = Math.min(120, (canvas.height - 220) / CARD_COUNT - 12);
         const gap = 12;
         const totalHeight = CARD_COUNT * cardH + (CARD_COUNT - 1) * gap;
         const startX = (canvas.width - cardW) / 2;
@@ -810,7 +810,7 @@ function generateLevelUpCardsFromPowerups(powerups) {
 
     if (isPortrait) {
         const cardW = Math.min(CARD_WIDTH, canvas.width * 0.7);
-        const cardH = Math.min(160, (canvas.height - 160) / CARD_COUNT - 12);
+        const cardH = Math.min(120, (canvas.height - 220) / CARD_COUNT - 12);
         const gap = 12;
         const totalHeight = CARD_COUNT * cardH + (CARD_COUNT - 1) * gap;
         const startX = (canvas.width - cardW) / 2;
