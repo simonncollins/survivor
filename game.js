@@ -1408,7 +1408,8 @@ function update(dt) {
                     spawnDamageNumber(e.x, e.y - e.radius, damage);
                 }
             }
-            explosions.push({ x: player.x, y: player.y, radius: 0, maxRadius: radius, lifetime: EXPLOSION_VISUAL_LIFETIME * 2, maxLifetime: EXPLOSION_VISUAL_LIFETIME * 2, color: AURA_COLOR });
+            // #45 Aura pulse ring follows the player — mark so render anchors to player.x/y each frame
+            explosions.push({ x: player.x, y: player.y, radius: 0, maxRadius: radius, lifetime: EXPLOSION_VISUAL_LIFETIME * 2, maxLifetime: EXPLOSION_VISUAL_LIFETIME * 2, color: AURA_COLOR, followPlayer: true });
         }
     }
 
@@ -1594,7 +1595,10 @@ function render() {
 
     // #26 Explosions (expanding rings)
     for (const e of explosions) {
-        const esp = worldToScreen(e.x, e.y);
+        // #45 Aura pulse visual follows the player; other explosions stay in world space.
+        const ex = e.followPlayer ? player.x : e.x;
+        const ey = e.followPlayer ? player.y : e.y;
+        const esp = worldToScreen(ex, ey);
         const t = 1 - (e.lifetime / e.maxLifetime);
         const r = e.maxRadius * (0.3 + 0.7 * t);
         ctx.strokeStyle = e.color;
