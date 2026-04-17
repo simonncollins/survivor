@@ -348,18 +348,6 @@ function createPool(factory, initialSize) {
 // --------------- Powerup Registry (#10) ---------------
 const POWERUPS = [
     {
-        name: 'Damage Up',
-        description: '+15% all weapon damage',
-        color: '#ff6644',
-        apply: function() { player.damageMultiplier *= 1.15; },
-    },
-    {
-        name: 'Fire Rate Up',
-        description: '+15% all fire rates',
-        color: '#ff44ff',
-        apply: function() { player.fireRateMultiplier *= 1.15; },
-    },
-    {
         name: 'Move Speed Up',
         description: '+10% player speed',
         color: '#44ffff',
@@ -496,8 +484,6 @@ function resetGameState() {
         invincibleUntil: 0,
         xp: 0,
         level: 1,
-        damageMultiplier: 1,
-        fireRateMultiplier: 1,
         weapons: ['magic_bolt'],
         magnetRadius: XP_MAGNET_BASE,
         explosionRadius: 0,
@@ -683,7 +669,7 @@ function fireMagicBolt() {
         vx: dir.x * MAGIC_BOLT_SPEED,
         vy: dir.y * MAGIC_BOLT_SPEED,
         radius: MAGIC_BOLT_RADIUS,
-        damage: MAGIC_BOLT_DAMAGE * player.damageMultiplier,
+        damage: MAGIC_BOLT_DAMAGE,
         maxRange: MAGIC_BOLT_RANGE,
         distanceTraveled: 0,
         pierceCount: 0,
@@ -704,7 +690,7 @@ function firePiercingBolt() {
             vx: dir.x * PIERCING_BOLT_SPEED,
             vy: dir.y * PIERCING_BOLT_SPEED,
             radius: PIERCING_BOLT_RADIUS,
-            damage: PIERCING_BOLT_DAMAGE * player.damageMultiplier,
+            damage: PIERCING_BOLT_DAMAGE,
             maxRange: PIERCING_BOLT_RANGE,
             distanceTraveled: 0,
             pierceCount: PIERCING_BOLT_MAX_PIERCE,
@@ -728,7 +714,7 @@ function fireBouncingSpark() {
         vx: dir.x * SPARK_SPEED,
         vy: dir.y * SPARK_SPEED,
         radius: SPARK_RADIUS,
-        damage: SPARK_DAMAGE * player.damageMultiplier,
+        damage: SPARK_DAMAGE,
         maxRange: SPARK_RANGE,
         distanceTraveled: 0,
         pierceCount: 0,
@@ -1214,7 +1200,7 @@ function update(dt) {
     game.weaponTimers.magic_bolt -= dt;
     if (game.weaponTimers.magic_bolt <= 0) {
         fireMagicBolt();
-        game.weaponTimers.magic_bolt = MAGIC_BOLT_COOLDOWN / player.fireRateMultiplier;
+        game.weaponTimers.magic_bolt = MAGIC_BOLT_COOLDOWN;
     }
 
     // Piercing Bolt (#7)
@@ -1222,7 +1208,7 @@ function update(dt) {
         game.weaponTimers.piercing_bolt -= dt;
         if (game.weaponTimers.piercing_bolt <= 0) {
             firePiercingBolt();
-            game.weaponTimers.piercing_bolt = PIERCING_BOLT_COOLDOWN / player.fireRateMultiplier;
+            game.weaponTimers.piercing_bolt = PIERCING_BOLT_COOLDOWN;
         }
     }
 
@@ -1231,7 +1217,7 @@ function update(dt) {
         game.weaponTimers.bouncing_spark -= dt;
         if (game.weaponTimers.bouncing_spark <= 0) {
             fireBouncingSpark();
-            game.weaponTimers.bouncing_spark = SPARK_COOLDOWN / player.fireRateMultiplier;
+            game.weaponTimers.bouncing_spark = SPARK_COOLDOWN;
         }
     }
 
@@ -1252,9 +1238,9 @@ function update(dt) {
                     const cooldownKey = 'orb_' + i + '_' + enemy.id;
                     if (!enemy[cooldownKey] || now - enemy[cooldownKey] >= ORBIT_HIT_COOLDOWN) {
                         enemy[cooldownKey] = now;
-                        enemy.hp -= ORBIT_DAMAGE * player.damageMultiplier;
+                        enemy.hp -= ORBIT_DAMAGE;
                         enemy.flashTimer = 0.05;
-                        spawnDamageNumber(enemy.x, enemy.y - enemy.radius, ORBIT_DAMAGE * player.damageMultiplier);
+                        spawnDamageNumber(enemy.x, enemy.y - enemy.radius, ORBIT_DAMAGE);
                     }
                 }
             }
@@ -1409,7 +1395,7 @@ function update(dt) {
         if (player.auraTimer <= 0) {
             player.auraTimer = AURA_INTERVAL;
             const radius = AURA_BASE_RADIUS + (player.auraLevel - 1) * AURA_STEP_RADIUS;
-            const damage = (AURA_BASE_DAMAGE + (player.auraLevel - 1) * AURA_STEP_DAMAGE) * player.damageMultiplier;
+            const damage = (AURA_BASE_DAMAGE + (player.auraLevel - 1) * AURA_STEP_DAMAGE);
             const nearby = queryNearby(enemyGrid, player.x, player.y, radius + ENEMY_RADIUS);
             for (const idx of nearby) {
                 const e = enemies[idx];
@@ -1435,7 +1421,7 @@ function update(dt) {
             const dy = target.y - player.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist <= BEAM_RANGE) {
-                const dps = (BEAM_DPS_BASE + (player.beamLevel - 1) * BEAM_DPS_STEP) * player.damageMultiplier;
+                const dps = (BEAM_DPS_BASE + (player.beamLevel - 1) * BEAM_DPS_STEP);
                 target.hp -= dps * dt;
                 target.flashTimer = 0.05;
                 player.beamTimer += dt;
