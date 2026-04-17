@@ -91,6 +91,17 @@ const SHAKE_DURATION = 0.3;
 const ENEMY_SEPARATION_FORCE = 0.4;
 const ENEMY_OVERLAP_THRESHOLD = 0.5; // fraction of smaller radius before repulsion
 
+// Treasure Chests (#27)
+const CHEST_WIDTH = 32;
+const CHEST_HEIGHT = 26;
+const CHEST_MIN_INTERVAL = 45;
+const CHEST_MAX_INTERVAL = 90;
+const CHEST_SPAWN_DIST_MIN = 400;
+const CHEST_SPAWN_DIST_MAX = 600;
+const CHEST_MAX_COUNT = 5;
+const CHEST_REWARD_MIN = 1;
+const CHEST_REWARD_MAX = 5;
+
 // --------------- Canvas Setup ---------------
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -373,7 +384,7 @@ const POWERUPS = [
 ];
 
 // --------------- Game State ---------------
-let game, player, enemies, projectiles, xpGems, particles, levelUpCards;
+let game, player, enemies, projectiles, xpGems, particles, levelUpCards, chests;
 let selectedPowerupIndex = -1;
 let levelUpOpenTime = 0;
 let enemyIdCounter = 0;
@@ -388,6 +399,8 @@ function resetGameState() {
         killCount: 0,
         shakeTimer: 0,
         shakeMagnitude: 0,
+        chestSpawnTimer: 0,
+        nextChestInterval: CHEST_MIN_INTERVAL + Math.random() * (CHEST_MAX_INTERVAL - CHEST_MIN_INTERVAL),
         weaponTimers: {
             magic_bolt: 0,
             piercing_bolt: 0,
@@ -422,6 +435,7 @@ function resetGameState() {
     levelUpCards = [];
     selectedPowerupIndex = -1;
     levelUpOpenTime = 0;
+    chests = [];
     enemyIdCounter = 0;
 }
 
@@ -935,6 +949,103 @@ function applyEnemySeparation() {
     }
 }
 
+// --------------- Treasure Chests (#27) ---------------
+function spawnChest() {
+    if (chests.length >= CHEST_MAX_COUNT) return;
+    const angle = Math.random() * Math.PI * 2;
+    const dist = CHEST_SPAWN_DIST_MIN + Math.random() * (CHEST_SPAWN_DIST_MAX - CHEST_SPAWN_DIST_MIN);
+    let cx = player.x + Math.cos(angle) * dist;
+    let cy = player.y + Math.sin(angle) * dist;
+    cx = Math.max(CHEST_WIDTH, Math.min(WORLD_WIDTH - CHEST_WIDTH, cx));
+    cy = Math.max(CHEST_HEIGHT, Math.min(WORLD_HEIGHT - CHEST_HEIGHT, cy));
+    chests.push({ x: cx, y: cy, width: CHEST_WIDTH, height: CHEST_HEIGHT });
+}
+
+function updateChests(dt) {
+    game.chestSpawnTimer += dt;
+    if (game.chestSpawnTimer >= game.nextChestInterval) {
+        game.chestSpawnTimer = 0;
+        game.nextChestInterval = CHEST_MIN_INTERVAL + Math.random() * (CHEST_MAX_INTERVAL - CHEST_MIN_INTERVAL);
+        spawnChest();
+    }
+
+    for (let i = chests.length - 1; i >= 0; i--) {
+        const chest = chests[i];
+        // Circle-rect collision with player
+        const closestX = Math.max(chest.x - chest.width / 2, Math.min(player.x, chest.x + chest.width / 2));
+        const closestY = Math.max(chest.y - chest.height / 2, Math.min(player.y, chest.y + chest.height / 2));
+        const dx = player.x - closestX;
+        const dy = player.y - closestY;
+        if (dx * dx + dy * dy < player.radius * player.radius) {
+            // Collect chest - spawn rewards
+            const rewardCount = CHEST_REWARD_MIN + Math.floor(Math.random() * (CHEST_REWARD_MAX - CHEST_REWARD_MIN + 1));
+            for (let r = 0; r < rewardCount; r++) {
+                const angle = (r / rewardCount) * Math.PI * 2 + Math.random() * 0.3;
+                const speed = 80 + Math.random() * 60;
+                const gemValue = XP_BASE_VALUE * (1 + Math.floor(Math.random() * 3));
+                const gem = {
+                    x: chest.x,
+                    y: chest.y,
+                    radius: XP_GEM_RADIUS,
+                    color: XP_GEM_COLOR,
+                    value: gemValue,
+                    popVx: Math.cos(angle) * speed,
+                    popVy: Math.sin(angle) * speed,
+                    popTimer: 0.4,
+                };
+                xpGems.push(gem);
+            }
+            // Sparkle particles
+            for (let s = 0; s < 8; s++) {
+                const pAngle = Math.random() * Math.PI * 2;
+                const pSpeed = 60 + Math.random() * 80;
+                particles.push({
+                    type: 'xp_burst',
+                    x: chest.x,
+                    y: chest.y,
+                    vx: Math.cos(pAngle) * pSpeed,
+                    vy: Math.sin(pAngle) * pSpeed,
+                    color: '#ffcc00',
+                    size: 4 + Math.random() * 3,
+                    lifetime: 0.4 + Math.random() * 0.2,
+                    maxLifetime: 0.5,
+                });
+            }
+            chests.splice(i, 1);
+        }
+    }
+}
+
+function renderChests() {
+    for (const chest of chests) {
+        const sp = worldToScreen(chest.x, chest.y);
+        const w = chest.width;
+        const h = chest.height;
+        const x = sp.x - w / 2;
+        const y = sp.y - h / 2;
+
+        // Chest body (brown)
+        ctx.fillStyle = '#8B4513';
+        ctx.fillRect(x, y + 4, w, h - 4);
+
+        // Chest lid (darker brown)
+        ctx.fillStyle = '#6B3410';
+        ctx.fillRect(x - 2, y, w + 4, 8);
+
+        // Gold trim
+        ctx.fillStyle = '#FFD700';
+        ctx.fillRect(x + w / 2 - 4, y + 2, 8, 6);  // lid clasp
+        ctx.fillRect(x + 2, y + h / 2 + 2, w - 4, 3);  // body band
+
+        // Glow effect
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur = 8 + 4 * Math.sin(game.survivalTime * 3);
+        ctx.fillStyle = '#FFD700';
+        ctx.fillRect(x + w / 2 - 3, y + 3, 6, 4);
+        ctx.shadowBlur = 0;
+    }
+}
+
 function update(dt) {
     if (game.state !== 'PLAYING') return;
 
@@ -1186,6 +1297,24 @@ function update(dt) {
         if (p.vy !== undefined) p.y += p.vy * dt;
     }
 
+    // Treasure chests (#27)
+    updateChests(dt);
+
+    // Update popping gems
+    for (const gem of xpGems) {
+        if (gem.popTimer > 0) {
+            gem.popTimer -= dt;
+            gem.x += gem.popVx * dt;
+            gem.y += gem.popVy * dt;
+            gem.popVx *= 0.92;
+            gem.popVy *= 0.92;
+            if (gem.popTimer <= 0) {
+                gem.popVx = 0;
+                gem.popVy = 0;
+            }
+        }
+    }
+
     updateCamera();
 }
 
@@ -1230,6 +1359,9 @@ function render() {
         ctx.arc(sp.x, sp.y, gem.radius, 0, Math.PI * 2);
         ctx.fill();
     }
+
+    // Draw treasure chests (#27)
+    renderChests();
 
     // Draw enemies
     for (const enemy of enemies) {
