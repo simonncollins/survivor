@@ -87,6 +87,10 @@ const XP_BURST_COUNT = 3;
 const SHAKE_MAGNITUDE = 8;
 const SHAKE_DURATION = 0.3;
 
+// Enemy Soft Collision (#29)
+const ENEMY_SEPARATION_FORCE = 0.4;
+const ENEMY_OVERLAP_THRESHOLD = 0.5; // fraction of smaller radius before repulsion
+
 // --------------- Canvas Setup ---------------
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -826,6 +830,32 @@ canvas.addEventListener('touchend', function(e) {
 }, { passive: false });
 
 // --------------- Update ---------------
+// --------------- Enemy Soft Collision (#29) ---------------
+function applyEnemySeparation() {
+    for (let i = 0; i < enemies.length; i++) {
+        for (let j = i + 1; j < enemies.length; j++) {
+            const a = enemies[i];
+            const b = enemies[j];
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const minRadius = Math.min(a.radius, b.radius);
+            const combinedRadius = a.radius + b.radius;
+            const overlapStart = combinedRadius * (1 - ENEMY_OVERLAP_THRESHOLD);
+            if (dist < overlapStart && dist > 0.01) {
+                const overlap = overlapStart - dist;
+                const pushDist = overlap * ENEMY_SEPARATION_FORCE;
+                const nx = dx / dist;
+                const ny = dy / dist;
+                a.x -= nx * pushDist * 0.5;
+                a.y -= ny * pushDist * 0.5;
+                b.x += nx * pushDist * 0.5;
+                b.y += ny * pushDist * 0.5;
+            }
+        }
+    }
+}
+
 function update(dt) {
     if (game.state !== 'PLAYING') return;
 
@@ -886,6 +916,9 @@ function update(dt) {
             enemy.flashTimer -= dt;
         }
     }
+
+    // Enemy soft collision / repulsion (#29)
+    applyEnemySeparation();
 
     // Contact damage (#4) with scaling (#12)
     const contactDamage = getScaledValue(CONTACT_BASE_DPS, now, 90);
