@@ -1120,6 +1120,7 @@ function spawnXpGem(x, y, value) {
 
 // --------------- Level Up Cards (#10) ---------------
 function generateLevelUpCards() {
+    isDragging = false; // Reset drag state when entering modal state (#60)
     levelUpCards = [];
     selectedPowerupIndex = -1;
     levelUpOpenTime = performance.now();
@@ -1285,6 +1286,7 @@ function handleLevelUpClick(clickX, clickY) {
 // --------------- Reward Dialog (#54) ---------------
 function showRewardDialog(reward) {
     // reward = { upgrades: [...], headerText: string, celebrationRarity: 'common'|'uncommon'|'rare' }
+    isDragging = false; // Reset drag state when entering modal state (#60)
     game.state = 'PAUSED_CHEST';
     rewardDialog = {
         upgrades: reward.upgrades || [],
@@ -1428,6 +1430,7 @@ function dismissRewardDialogWithKeyboard() {
 
 // --------------- Input ---------------
 let isDragging = false;
+let touchHandledThisFrame = false; // Prevent double-fire between touch and pointer events (#60)
 
 function handleGameClick(screenX, screenY) {
     if (game.state === 'MENU') {
@@ -1515,9 +1518,10 @@ canvas.addEventListener('mouseup', function() {
     isDragging = false;
 });
 
-// --- Touch events (#18, #24) ---
+// --- Touch events (#18, #24, #60) ---
 canvas.addEventListener('touchstart', function(e) {
     e.preventDefault();
+    touchHandledThisFrame = true; // Mark touch as handled for this frame (#60)
     const rect = canvas.getBoundingClientRect();
     const touch = e.touches[0];
     const sx = touch.clientX - rect.left;
@@ -1553,8 +1557,51 @@ canvas.addEventListener('touchmove', function(e) {
 
 canvas.addEventListener('touchend', function(e) {
     e.preventDefault();
+    // Fallback: dispatch click for modal states if touchstart didn't fire (#60)
+    if (game.state === 'PAUSED_LEVELUP' || game.state === 'PAUSED_CHEST') {
+        if (e.changedTouches.length > 0) {
+            const rect = canvas.getBoundingClientRect();
+            const touch = e.changedTouches[0];
+            const sx = touch.clientX - rect.left;
+            const sy = touch.clientY - rect.top;
+            handleGameClick(sx, sy);
+        }
+    }
     isDragging = false;
 }, { passive: false });
+
+// --- Pointer events fallback (#60) ---
+canvas.addEventListener('pointerdown', function(e) {
+    // Skip if touch was already handled this frame (prevents double-fire)
+    if (e.pointerType === 'touch' && touchHandledThisFrame) {
+        return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+
+    if (game.state === 'MENU' || game.state === 'GAME_OVER' || game.state === 'PAUSED_LEVELUP' || game.state === 'PAUSED_CHEST') {
+        handleGameClick(sx, sy);
+        return;
+    }
+
+    if (game.state === 'PLAYING') {
+        isDragging = true;
+        const worldX = sx + game.camera.x;
+        const worldY = sy + game.camera.y;
+        player.targetX = worldX;
+        player.targetY = worldY;
+        player.moving = true;
+    }
+});
+
+// Reset touch handled flag at the start of each frame
+canvas.addEventListener('pointerup', function() {
+    // Small delay to ensure any touch events in the same frame complete first
+    requestAnimationFrame(function() {
+        touchHandledThisFrame = false;
+    });
+});
 
 // --------------- Keyboard Input (#54) ---------------
 window.addEventListener('keydown', function(e) {
