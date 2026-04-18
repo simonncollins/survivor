@@ -886,23 +886,58 @@ function spawnXpGem(x, y, value) {
     });
 }
 
-// --------------- Level Up Cards (#10) ---------------
+// --------------- Shuffle Helper (#53) ---------------
+function shuffleArray(array) {
+    const arr = array.slice();
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
+// --------------- Level Up Cards (#10, #53) ---------------
 function generateLevelUpCards() {
     levelUpCards = [];
     selectedPowerupIndex = -1;
     levelUpOpenTime = performance.now();
 
+    // Filter eligible powerups (not maxed out, meets unlock prerequisites)
+    // Currently no max levels or unlock prerequisites are defined, so all are eligible
+    const eligiblePowerups = POWERUPS.filter(function(p) {
+        // Add any future max level or unlock checks here
+        return true;
+    });
+
+    // If pool is empty, skip level-up UI and auto-resume gameplay
+    if (eligiblePowerups.length === 0) {
+        game.state = 'PLAYING';
+        return;
+    }
+
+    // Shuffle and sample without replacement (up to 3)
+    const shuffled = shuffleArray(eligiblePowerups);
+    const selectedPowerups = shuffled.slice(0, Math.min(3, shuffled.length));
+
+    // Invariant: no duplicates within the same level-up event
+    const uniqueIds = new Set(selectedPowerups.map(function(p) { return p.id; }));
+    if (uniqueIds.size !== selectedPowerups.length) {
+        throw new Error('Invariant violated: duplicate powerups in level-up cards');
+    }
+
+    const cardCount = selectedPowerups.length;
+
     if (isPortrait) {
         // Portrait/mobile: stack cards vertically with smaller dimensions
         const cardW = Math.min(CARD_WIDTH, canvas.width * 0.7);
-        const cardH = Math.min(120, (canvas.height - 220) / CARD_COUNT - 12);
+        const cardH = Math.min(120, (canvas.height - 220) / Math.max(cardCount, 1) - 12);
         const gap = 12;
-        const totalHeight = CARD_COUNT * cardH + (CARD_COUNT - 1) * gap;
+        const totalHeight = cardCount * cardH + (cardCount - 1) * gap;
         const startX = (canvas.width - cardW) / 2;
         const startY = (canvas.height - totalHeight) / 2 + 30;
 
-        for (let i = 0; i < CARD_COUNT; i++) {
-            const powerup = POWERUPS[Math.floor(Math.random() * POWERUPS.length)];
+        for (let i = 0; i < cardCount; i++) {
+            const powerup = selectedPowerups[i];
             const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
                 x: startX,
@@ -916,12 +951,12 @@ function generateLevelUpCards() {
         }
     } else {
         // Landscape/desktop: horizontal row
-        const totalWidth = CARD_COUNT * CARD_WIDTH + (CARD_COUNT - 1) * CARD_GAP;
+        const totalWidth = cardCount * CARD_WIDTH + (cardCount - 1) * CARD_GAP;
         const startX = (canvas.width - totalWidth) / 2;
         const startY = (canvas.height - CARD_HEIGHT) / 2;
 
-        for (let i = 0; i < CARD_COUNT; i++) {
-            const powerup = POWERUPS[Math.floor(Math.random() * POWERUPS.length)];
+        for (let i = 0; i < cardCount; i++) {
+            const powerup = selectedPowerups[i];
             const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
                 x: startX + i * (CARD_WIDTH + CARD_GAP),
@@ -941,15 +976,19 @@ function generateLevelUpCardsFromPowerups(powerups) {
     selectedPowerupIndex = -1;
     levelUpOpenTime = performance.now();
 
+    // Use powerups.length for layout (not CARD_COUNT) - preserves original card count on resize
+    const cardCount = powerups.length;
+    if (cardCount === 0) return;
+
     if (isPortrait) {
         const cardW = Math.min(CARD_WIDTH, canvas.width * 0.7);
-        const cardH = Math.min(120, (canvas.height - 220) / CARD_COUNT - 12);
+        const cardH = Math.min(120, (canvas.height - 220) / Math.max(cardCount, 1) - 12);
         const gap = 12;
-        const totalHeight = CARD_COUNT * cardH + (CARD_COUNT - 1) * gap;
+        const totalHeight = cardCount * cardH + (cardCount - 1) * gap;
         const startX = (canvas.width - cardW) / 2;
         const startY = (canvas.height - totalHeight) / 2 + 30;
 
-        for (let i = 0; i < powerups.length; i++) {
+        for (let i = 0; i < cardCount; i++) {
             const powerup = powerups[i];
             const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
@@ -963,11 +1002,11 @@ function generateLevelUpCardsFromPowerups(powerups) {
             });
         }
     } else {
-        const totalWidth = CARD_COUNT * CARD_WIDTH + (CARD_COUNT - 1) * CARD_GAP;
+        const totalWidth = cardCount * CARD_WIDTH + (cardCount - 1) * CARD_GAP;
         const startX = (canvas.width - totalWidth) / 2;
         const startY = (canvas.height - CARD_HEIGHT) / 2;
 
-        for (let i = 0; i < powerups.length; i++) {
+        for (let i = 0; i < cardCount; i++) {
             const powerup = powerups[i];
             const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
