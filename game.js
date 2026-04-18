@@ -345,64 +345,130 @@ function createPool(factory, initialSize) {
     };
 }
 
-// --------------- Powerup Registry (#10) ---------------
+// --------------- Powerup Registry (#10, #43) ---------------
 const POWERUPS = [
     {
+        id: 'moveSpeed',
         name: 'Move Speed Up',
         description: '+10% player speed',
         color: '#44ffff',
-        apply: function() { player.speed *= 1.10; },
+        level: 0,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            return '+' + (lvl * 10) + '% speed → +' + ((lvl + 1) * 10) + '% speed';
+        },
+        apply: function() {
+            this.level++;
+            player.speed *= 1.10;
+        },
     },
     {
+        id: 'maxHp',
         name: 'Max HP Up',
         description: '+25 max HP, heal 25',
         color: '#44ff44',
+        level: 0,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            return '+' + (lvl * 25) + ' max HP → +' + ((lvl + 1) * 25) + ' max HP';
+        },
         apply: function() {
+            this.level++;
             player.maxHp += 25;
             player.hp = Math.min(player.hp + 25, player.maxHp);
         },
     },
     {
+        id: 'piercing',
         name: 'Piercing Bolt',
-        description: 'Adds piercing bolt weapon',
+        description: 'Unlock: fires 2 piercing bolts left/right',
         color: '#ff8844',
+        level: 0,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const bolts = 2 + Math.max(0, lvl - 1);
+            const nextBolts = 2 + lvl;
+            return 'Fires ' + bolts + ' bolts → ' + nextBolts + ' bolts';
+        },
         apply: function() {
+            this.level++;
             if (!player.weapons.includes('piercing_bolt')) {
                 player.weapons.push('piercing_bolt');
             }
+            player.piercingBoltLevel++;
         },
     },
     {
+        id: 'orbit',
         name: 'Orbit Shield',
-        description: 'Adds orbit shield weapon',
+        description: 'Unlock: 4 orbiting damage orbs',
         color: ORBIT_COLOR,
+        level: 0,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const orbs = 4 + Math.max(0, lvl - 1);
+            const nextOrbs = 4 + lvl;
+            return orbs + ' orbs → ' + nextOrbs + ' orbs';
+        },
         apply: function() {
+            this.level++;
             if (!player.weapons.includes('orbit_shield')) {
                 player.weapons.push('orbit_shield');
             }
+            player.orbitShieldLevel++;
         },
     },
     {
+        id: 'spark',
         name: 'Bouncing Spark',
-        description: 'Adds bouncing spark weapon',
+        description: 'Unlock: bouncing projectile (3 bounces)',
         color: SPARK_COLOR,
+        level: 0,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const bounces = 3 + Math.max(0, lvl - 1);
+            const nextBounces = 3 + lvl;
+            return bounces + ' bounces → ' + nextBounces + ' bounces';
+        },
         apply: function() {
+            this.level++;
             if (!player.weapons.includes('bouncing_spark')) {
                 player.weapons.push('bouncing_spark');
             }
+            player.sparkLevel++;
         },
     },
     {
+        id: 'xpRange',
         name: 'Greater XP Range',
         description: '+40 XP gem pickup range',
         color: '#ffee66',
-        apply: function() { player.magnetRadius += XP_MAGNET_STEP; },
+        level: 0,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const range = XP_MAGNET_BASE + (lvl * XP_MAGNET_STEP);
+            const nextRange = XP_MAGNET_BASE + ((lvl + 1) * XP_MAGNET_STEP);
+            return 'Range ' + range + ' → ' + nextRange;
+        },
+        apply: function() {
+            this.level++;
+            player.magnetRadius += XP_MAGNET_STEP;
+        },
     },
     {
+        id: 'explosion',
         name: 'Area Effect Explosions',
-        description: 'Projectiles explode on impact',
+        description: 'Unlock: projectiles explode on impact',
         color: EXPLOSION_COLOR,
+        level: 0,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const radius = EXPLOSION_BASE_RADIUS + ((lvl - 1) * EXPLOSION_STEP_RADIUS);
+            const nextRadius = radius + EXPLOSION_STEP_RADIUS;
+            return 'Radius ' + radius + ' → ' + nextRadius;
+        },
         apply: function() {
+            this.level++;
             if (player.explosionRadius <= 0) {
                 player.explosionRadius = EXPLOSION_BASE_RADIUS;
             } else {
@@ -411,36 +477,77 @@ const POWERUPS = [
         },
     },
     {
+        id: 'aura',
         name: 'Pulsing Aura',
-        description: 'Damages nearby enemies every 1.5s',
+        description: 'Unlock: damages nearby enemies every 1.5s',
         color: AURA_COLOR,
-        apply: function() { player.auraLevel += 1; },
-    },
-    {
-        name: 'Beam',
-        description: 'Continuous laser to nearest enemy',
-        color: BEAM_COLOR,
+        level: 0,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const radius = AURA_BASE_RADIUS + ((lvl - 1) * AURA_STEP_RADIUS);
+            const nextRadius = radius + AURA_STEP_RADIUS;
+            const dmg = AURA_BASE_DAMAGE + ((lvl - 1) * AURA_STEP_DAMAGE);
+            const nextDmg = dmg + AURA_STEP_DAMAGE;
+            return 'R:' + radius + ' D:' + dmg + ' → R:' + nextRadius + ' D:' + nextDmg;
+        },
         apply: function() {
-            if (!player.weapons.includes('beam')) {
-                player.weapons.push('beam');
-            } else {
-                player.beamLevel += 1;
-            }
+            this.level++;
+            player.auraLevel += 1;
         },
     },
     {
+        id: 'beam',
+        name: 'Beam',
+        description: 'Unlock: continuous laser to nearest enemy',
+        color: BEAM_COLOR,
+        level: 0,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const dps = BEAM_DPS_BASE + ((lvl - 1) * BEAM_DPS_STEP);
+            const nextDps = dps + BEAM_DPS_STEP;
+            return dps + ' DPS → ' + nextDps + ' DPS';
+        },
+        apply: function() {
+            this.level++;
+            if (!player.weapons.includes('beam')) {
+                player.weapons.push('beam');
+            }
+            player.beamLevel += 1;
+        },
+    },
+    {
+        id: 'armor',
         name: 'Armor',
         description: '+10% damage reduction (cap 60%)',
         color: '#8899aa',
+        level: 0,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const pct = Math.min(ARMOR_CAP, lvl * ARMOR_STEP);
+            const nextPct = Math.min(ARMOR_CAP, (lvl + 1) * ARMOR_STEP);
+            return Math.round(pct * 100) + '% reduction → ' + Math.round(nextPct * 100) + '% reduction';
+        },
         apply: function() {
+            this.level++;
             player.armor = Math.min(ARMOR_CAP, player.armor + ARMOR_STEP);
         },
     },
     {
+        id: 'regen',
         name: 'HP Regeneration',
         description: '+0.33 HP/sec regen',
         color: '#66ff88',
-        apply: function() { player.regenPerSec += REGEN_STEP; },
+        level: 0,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const regen = (lvl * REGEN_STEP).toFixed(2);
+            const nextRegen = ((lvl + 1) * REGEN_STEP).toFixed(2);
+            return regen + ' HP/s → ' + nextRegen + ' HP/s';
+        },
+        apply: function() {
+            this.level++;
+            player.regenPerSec += REGEN_STEP;
+        },
     },
 ];
 
@@ -489,10 +596,14 @@ function resetGameState() {
         explosionRadius: 0,
         auraLevel: 0,
         auraTimer: 0,
-        beamLevel: 1,
+        beamLevel: 0,
         beamTimer: 0,
         armor: 0,
         regenPerSec: 0,
+        // Per-weapon levels for stacking (#43)
+        piercingBoltLevel: 0,
+        orbitShieldLevel: 0,
+        sparkLevel: 0,
     };
 
     enemies = [];
@@ -506,6 +617,11 @@ function resetGameState() {
     explosions = [];
     beams = [];
     enemyIdCounter = 0;
+
+    // Reset powerup levels for new game (#43)
+    for (const p of POWERUPS) {
+        p.level = 0;
+    }
 }
 
 resetGameState();
@@ -680,8 +796,23 @@ function fireMagicBolt() {
 }
 
 function firePiercingBolt() {
-    // Fires two bolts: left and right (#7)
-    const dirs = [{ x: -1, y: 0 }, { x: 1, y: 0 }];
+    // Fires bolts based on piercingBoltLevel: 2 + (level - 1) additional bolts (#43)
+    const boltCount = 2 + Math.max(0, player.piercingBoltLevel - 1);
+    const baseDirs = [{ x: -1, y: 0 }, { x: 1, y: 0 }];
+    
+    // Always fire left/right, add diagonal bolts for higher levels
+    const dirs = [...baseDirs];
+    if (player.piercingBoltLevel >= 2) {
+        dirs.push({ x: 0, y: -1 }); // up
+        dirs.push({ x: 0, y: 1 });  // down
+    }
+    if (player.piercingBoltLevel >= 3) {
+        dirs.push({ x: -0.707, y: -0.707 }); // up-left
+        dirs.push({ x: 0.707, y: -0.707 });  // up-right
+        dirs.push({ x: -0.707, y: 0.707 });  // down-left
+        dirs.push({ x: 0.707, y: 0.707 });   // down-right
+    }
+    
     for (const dir of dirs) {
         projectiles.push({
             type: 'piercing_bolt',
@@ -707,6 +838,8 @@ function fireBouncingSpark() {
     const target = findNearestEnemy(player.x, player.y);
     if (!target) return;
     const dir = normalize(target.x - player.x, target.y - player.y);
+    // Bounces increase with sparkLevel (#43)
+    const bounces = SPARK_MAX_BOUNCES + Math.max(0, player.sparkLevel - 1);
     projectiles.push({
         type: 'bouncing_spark',
         x: player.x,
@@ -718,7 +851,7 @@ function fireBouncingSpark() {
         maxRange: SPARK_RANGE,
         distanceTraveled: 0,
         pierceCount: 0,
-        bouncesRemaining: SPARK_MAX_BOUNCES,
+        bouncesRemaining: bounces,
         color: SPARK_COLOR,
         hitEnemies: new Set(),
         lastHitId: -1,
@@ -760,6 +893,7 @@ function generateLevelUpCards() {
 
         for (let i = 0; i < CARD_COUNT; i++) {
             const powerup = POWERUPS[Math.floor(Math.random() * POWERUPS.length)];
+            const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
                 x: startX,
                 y: startY + i * (cardH + gap),
@@ -767,6 +901,7 @@ function generateLevelUpCards() {
                 height: cardH,
                 powerup: powerup,
                 hovered: false,
+                levelLabel: levelLabel,
             });
         }
     } else {
@@ -777,6 +912,7 @@ function generateLevelUpCards() {
 
         for (let i = 0; i < CARD_COUNT; i++) {
             const powerup = POWERUPS[Math.floor(Math.random() * POWERUPS.length)];
+            const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
                 x: startX + i * (CARD_WIDTH + CARD_GAP),
                 y: startY,
@@ -784,6 +920,7 @@ function generateLevelUpCards() {
                 height: CARD_HEIGHT,
                 powerup: powerup,
                 hovered: false,
+                levelLabel: levelLabel,
             });
         }
     }
@@ -803,13 +940,16 @@ function generateLevelUpCardsFromPowerups(powerups) {
         const startY = (canvas.height - totalHeight) / 2 + 30;
 
         for (let i = 0; i < powerups.length; i++) {
+            const powerup = powerups[i];
+            const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
                 x: startX,
                 y: startY + i * (cardH + gap),
                 width: cardW,
                 height: cardH,
-                powerup: powerups[i],
+                powerup: powerup,
                 hovered: false,
+                levelLabel: levelLabel,
             });
         }
     } else {
@@ -818,13 +958,16 @@ function generateLevelUpCardsFromPowerups(powerups) {
         const startY = (canvas.height - CARD_HEIGHT) / 2;
 
         for (let i = 0; i < powerups.length; i++) {
+            const powerup = powerups[i];
+            const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
                 x: startX + i * (CARD_WIDTH + CARD_GAP),
                 y: startY,
                 width: CARD_WIDTH,
                 height: CARD_HEIGHT,
-                powerup: powerups[i],
+                powerup: powerup,
                 hovered: false,
+                levelLabel: levelLabel,
             });
         }
     }
@@ -1221,11 +1364,13 @@ function update(dt) {
         }
     }
 
-    // Orbit Shield (#11)
+    // Orbit Shield (#11, #43)
     if (player.weapons.includes('orbit_shield')) {
         game.orbitAngle += (2 * Math.PI / ORBIT_PERIOD) * dt;
-        for (let i = 0; i < ORBIT_ORB_COUNT; i++) {
-            const angle = game.orbitAngle + (i * Math.PI * 2 / ORBIT_ORB_COUNT);
+        // Orb count increases with orbitShieldLevel: 4 + (level - 1)
+        const orbCount = ORBIT_ORB_COUNT + Math.max(0, player.orbitShieldLevel - 1);
+        for (let i = 0; i < orbCount; i++) {
+            const angle = game.orbitAngle + (i * Math.PI * 2 / orbCount);
             const orbX = player.x + Math.cos(angle) * ORBIT_RADIUS;
             const orbY = player.y + Math.sin(angle) * ORBIT_RADIUS;
             const orb = { x: orbX, y: orbY, radius: ORBIT_ORB_RADIUS };
@@ -1541,10 +1686,11 @@ function render() {
         ctx.fill();
     }
 
-    // Draw orbit shield orbs (#11)
+    // Draw orbit shield orbs (#11, #43)
     if (player.weapons.includes('orbit_shield')) {
-        for (let i = 0; i < ORBIT_ORB_COUNT; i++) {
-            const angle = game.orbitAngle + (i * Math.PI * 2 / ORBIT_ORB_COUNT);
+        const orbCount = ORBIT_ORB_COUNT + Math.max(0, player.orbitShieldLevel - 1);
+        for (let i = 0; i < orbCount; i++) {
+            const angle = game.orbitAngle + (i * Math.PI * 2 / orbCount);
             const orbX = player.x + Math.cos(angle) * ORBIT_RADIUS;
             const orbY = player.y + Math.sin(angle) * ORBIT_RADIUS;
             const sp = worldToScreen(orbX, orbY);
@@ -1797,7 +1943,10 @@ function renderLevelUpScreen() {
 
         ctx.fillStyle = '#aaaaaa';
         ctx.font = descSize + 'px sans-serif';
-        const words = card.powerup.description.split(' ');
+        const descText = (typeof card.powerup.describe === 'function')
+            ? card.powerup.describe(card.powerup.level || 0)
+            : card.powerup.description;
+        const words = descText.split(' ');
         let line = '';
         let lineY = nameY + (small ? 16 : 30);
         for (const word of words) {
@@ -1812,6 +1961,14 @@ function renderLevelUpScreen() {
         }
         if (line) {
             ctx.fillText(line, card.x + card.width / 2, lineY);
+            lineY += small ? 14 : 18;
+        }
+
+        // Stack-level progression label (e.g. "Lv 2 → Lv 3")
+        if (card.levelLabel) {
+            ctx.fillStyle = card.powerup.color;
+            ctx.font = 'bold ' + descSize + 'px sans-serif';
+            ctx.fillText(card.levelLabel, card.x + card.width / 2, lineY + (small ? 4 : 6));
         }
     }
 
@@ -1920,6 +2077,22 @@ function renderHUD() {
     ctx.font = (small ? 11 : 14) + 'px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('Level ' + player.level, canvas.width / 2, xpBarY - (small ? 4 : 6));
+
+    // Owned upgrades list (right side) - #43 stacking upgrades
+    const owned = POWERUPS.filter(function(p) { return (p.level || 0) > 0; });
+    if (owned.length > 0) {
+        const listX = canvas.width - (small ? 10 : 20);
+        const lineH = small ? 12 : 15;
+        const startY = (small ? 44 : 60);
+        ctx.textAlign = 'right';
+        ctx.font = 'bold ' + (small ? 10 : 12) + 'px sans-serif';
+        for (let i = 0; i < owned.length; i++) {
+            const p = owned[i];
+            const y = startY + i * lineH;
+            ctx.fillStyle = p.color;
+            ctx.fillText(p.name + ' ×' + p.level, listX, y);
+        }
+    }
 
     ctx.restore();
 }
