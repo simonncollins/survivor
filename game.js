@@ -155,6 +155,21 @@ window.addEventListener('resize', function() {
 });
 resizeCanvas();
 
+// --------------- Pointer Detection (#52) ---------------
+const finePointerQuery = window.matchMedia('(pointer: fine)');
+let hasFinePointer = finePointerQuery.matches;
+let mouseOverCanvas = false;
+let currentMouseX = 0;
+let currentMouseY = 0;
+
+finePointerQuery.addEventListener('change', function(e) {
+    hasFinePointer = e.matches;
+    if (!hasFinePointer) {
+        // Switching to coarse pointer: stop mouse follow
+        mouseOverCanvas = false;
+    }
+});
+
 // --------------- Sound Manager (Web Audio API) (#28) ---------------
 const Sound = (function() {
     let audioCtx = null;
@@ -1065,12 +1080,16 @@ canvas.addEventListener('mousedown', function(e) {
     }
 
     if (game.state === 'PLAYING') {
-        isDragging = true;
-        const worldX = sx + game.camera.x;
-        const worldY = sy + game.camera.y;
-        player.targetX = worldX;
-        player.targetY = worldY;
-        player.moving = true;
+        // On fine-pointer devices, click is disabled for movement (use mouse-follow instead)
+        // On coarse-pointer devices, keep existing drag-to-move behavior
+        if (!hasFinePointer) {
+            isDragging = true;
+            const worldX = sx + game.camera.x;
+            const worldY = sy + game.camera.y;
+            player.targetX = worldX;
+            player.targetY = worldY;
+            player.moving = true;
+        }
     }
 });
 
@@ -1078,6 +1097,10 @@ canvas.addEventListener('mousemove', function(e) {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
+
+    // Track mouse position for fine-pointer follow
+    currentMouseX = mx;
+    currentMouseY = my;
 
     // Hover detection for level-up cards
     if (game.state === 'PAUSED_LEVELUP') {
@@ -1087,8 +1110,17 @@ canvas.addEventListener('mousemove', function(e) {
         }
     }
 
-    // Drag-to-move: update target while dragging
-    if (isDragging && game.state === 'PLAYING') {
+    // Fine-pointer: continuous follow while mouse is over canvas (and not paused)
+    if (hasFinePointer && mouseOverCanvas && game.state === 'PLAYING') {
+        const worldX = mx + game.camera.x;
+        const worldY = my + game.camera.y;
+        player.targetX = worldX;
+        player.targetY = worldY;
+        player.moving = true;
+    }
+
+    // Coarse-pointer: drag-to-move (existing behavior)
+    if (!hasFinePointer && isDragging && game.state === 'PLAYING') {
         const worldX = mx + game.camera.x;
         const worldY = my + game.camera.y;
         player.targetX = worldX;
@@ -1099,6 +1131,26 @@ canvas.addEventListener('mousemove', function(e) {
 
 canvas.addEventListener('mouseup', function() {
     isDragging = false;
+});
+
+canvas.addEventListener('mouseenter', function() {
+    mouseOverCanvas = true;
+});
+
+canvas.addEventListener('mouseleave', function() {
+    mouseOverCanvas = false;
+    // Stop movement on mouse leave (hold last target with zero-length vector)
+    if (hasFinePointer && game.state === 'PLAYING') {
+        player.moving = false;
+    }
+});
+
+// Handle blur (window loses focus) - stop movement
+window.addEventListener('blur', function() {
+    mouseOverCanvas = false;
+    if (game && game.state === 'PLAYING') {
+        player.moving = false;
+    }
 });
 
 // --- Touch events (#18, #24) ---
@@ -1429,28 +1481,32 @@ function update(dt) {
         if (game.shakeTimer < 0) game.shakeTimer = 0;
     }
 
-    // Player movement (#2)
+    // Player movement (#2, #52)
     if (player.moving) {
         const dx = player.targetX - player.x;
         const dy = player.targetY - player.y;
         const d = Math.sqrt(dx * dx + dy * dy);
+        const step = player.speed * dt;
 
-        if (d < 2) {
+        // Anti-jitter: snap to target when distance is less than per-frame step
+        if (d < step) {
             player.x = player.targetX;
             player.y = player.targetY;
-            player.moving = false;
-        } else {
-            const step = player.speed * dt;
-            if (step >= d) {
-                player.x = player.targetX;
-                player.y = player.targetY;
+            // On fine-pointer, keep moving toward mouse; on coarse-pointer, stop
+            if (!hasFinePointer || !mouseOverCanvas) {
                 player.moving = false;
-            } else {
-                player.x += (dx / d) * step;
-                player.y += (dy / d) * step;
             }
+        } else if (d < 2) {
+            // Legacy small-distance snap
+            player.x = player.targetX;
+            player.y = player.targetY;
+            if (!hasFinePointer || !mouseOverCanvas) {
+                player.moving = false;
+            }
+        } else {
+            player.x += (dx / d) * step;
+            player.y += (dy / d) * step;
         }
-
     }
 
     // Enemy spawning (#3) with scaling (#12)
