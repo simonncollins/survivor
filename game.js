@@ -3190,3 +3190,132 @@ function init() {
 }
 
 init();
+
+// --------------- Debug Overlay (#63) ---------------
+// Opt-in input event logger. Activate with ?debug=1 in URL.
+// Renders a fixed-position log of the last 8 pointer/touch/click events
+// so we can capture the exact event sequence on real mobile devices.
+// Zero runtime overhead when not active: overlay is only created and
+// listeners only attached when the query flag is set.
+(function initDebugOverlay() {
+    let enabled = false;
+    try {
+        enabled = new URLSearchParams(window.location.search).get('debug') === '1';
+    } catch (_) {
+        enabled = false;
+    }
+    if (!enabled) return;
+
+    // Mirror button hitbox math from handleLevelUpClick / handleRewardDialogClick
+    // so the overlay can report whether a tap landed inside the Confirm/Continue
+    // button. Keep inline (not a shared helper) to avoid touching existing paths.
+    function confirmBtnRect() {
+        const small = canvas.width < 600;
+        const btnW = small ? 140 : 180;
+        const btnH = small ? 36 : 44;
+        const btnX = canvas.width / 2 - btnW / 2;
+        let btnY = null;
+        if (game.state === 'PAUSED_LEVELUP' && typeof levelUpCards !== 'undefined' && levelUpCards && levelUpCards.length > 0) {
+            const lastCard = levelUpCards[levelUpCards.length - 1];
+            btnY = lastCard.y + lastCard.height + (small ? 16 : 24);
+        } else if (game.state === 'PAUSED_CHEST' && typeof rewardDialog !== 'undefined' && rewardDialog && rewardDialog.layout) {
+            btnY = rewardDialog.layout.buttonY + (small ? 8 : 10);
+        }
+        if (btnY === null) return null;
+        return { x: btnX, y: btnY, w: btnW, h: btnH };
+    }
+
+    function pointInRect(px, py, r) {
+        return r && px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+    }
+
+    // Build overlay container
+    const box = document.createElement('div');
+    box.id = 'debugOverlay';
+    box.style.cssText = [
+        'position:fixed',
+        'left:8px',
+        'bottom:8px',
+        'z-index:99999',
+        'font:11px/1.25 ui-monospace,SFMono-Regular,Menlo,monospace',
+        'color:#fff',
+        'background:rgba(0,0,0,0.55)',
+        'padding:6px 8px',
+        'border-radius:6px',
+        'max-width:calc(100vw - 16px)',
+        'white-space:pre',
+        'pointer-events:none',
+        'user-select:none',
+        '-webkit-user-select:none',
+    ].join(';');
+    box.textContent = 'debug overlay ready (?debug=1)';
+    document.body.appendChild(box);
+
+    const ring = []; // newest first
+    const MAX = 8;
+
+    function render() {
+        box.textContent = ring.length === 0
+            ? 'debug overlay ready (?debug=1)'
+            : ring.map(formatLine).join('\n');
+    }
+
+    function formatLine(e) {
+        const pd = e.pd ? 'Y' : 'n';
+        return `${e.type.padEnd(11)} @${e.cx},${e.cy} st=${e.state} btn=${e.btn} pd=${pd}`;
+    }
+
+    function extractCoords(ev) {
+        if (ev.touches && ev.touches.length > 0) {
+            const t = ev.touches[0];
+            return { cx: Math.round(t.clientX), cy: Math.round(t.clientY) };
+        }
+        if (ev.changedTouches && ev.changedTouches.length > 0) {
+            const t = ev.changedTouches[0];
+            return { cx: Math.round(t.clientX), cy: Math.round(t.clientY) };
+        }
+        if (typeof ev.clientX === 'number') {
+            return { cx: Math.round(ev.clientX), cy: Math.round(ev.clientY) };
+        }
+        return { cx: -1, cy: -1 };
+    }
+
+    function relativeToCanvas(cx, cy) {
+        const rect = canvas.getBoundingClientRect();
+        return { sx: cx - rect.left, sy: cy - rect.top };
+    }
+
+    function log(ev) {
+        const { cx, cy } = extractCoords(ev);
+        const { sx, sy } = relativeToCanvas(cx, cy);
+        const r = confirmBtnRect();
+        const entry = {
+            type: ev.type,
+            cx, cy,
+            state: (typeof game !== 'undefined' && game && game.state) ? game.state : '?',
+            btn: pointInRect(sx, sy, r) ? 'Y' : 'n',
+            pd: ev.defaultPrevented,
+        };
+        ring.unshift(entry);
+        if (ring.length > MAX) ring.pop();
+        render();
+        // Re-check defaultPrevented after other listeners run (they may
+        // call preventDefault after us in capture phase).
+        const snapshot = entry;
+        queueMicrotask(function () {
+            if (ev.defaultPrevented !== snapshot.pd) {
+                snapshot.pd = ev.defaultPrevented;
+                render();
+            }
+        });
+    }
+
+    // Capture-phase listeners at document level: see the event before any
+    // canvas handler can stopPropagation() it. Passive where supported so
+    // we don't interfere with scroll / gesture behavior.
+    const EVENTS = ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'click'];
+    const opts = { capture: true, passive: true };
+    for (const type of EVENTS) {
+        document.addEventListener(type, log, opts);
+    }
+})();
