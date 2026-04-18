@@ -142,8 +142,8 @@ const REWARD_DIALOG_ITEM_GAP = 10;
 const REWARD_DIALOG_MAX_WIDTH = 500;
 const REWARD_DIALOG_CELEBRATION_DURATION = 3.0;
 
-// Build version for splash screen and cache-busting (#62)
-const BUILD_VERSION = 'v2026-04-18 · r001';
+// Build version for splash screen and cache-busting (#62, #63)
+const BUILD_VERSION = 'v2026-04-18 · r002';
 
 // --------------- Canvas Setup ---------------
 const canvas = document.getElementById('gameCanvas');
@@ -156,7 +156,8 @@ function resizeCanvas() {
     canvas.height = window.innerHeight;
     isPortrait = window.innerWidth < window.innerHeight;
 }
-window.addEventListener('resize', function() {
+
+function onResizeHandler() {
     resizeCanvas();
     if (game && game.state === 'PAUSED_LEVELUP' && levelUpCards.length > 0) {
         var savedPowerups = levelUpCards.map(function(c) { return c.powerup; });
@@ -165,8 +166,31 @@ window.addEventListener('resize', function() {
     if (game && game.state === 'PAUSED_CHEST' && rewardDialog) {
         layoutRewardDialog();
     }
-});
+}
+
+window.addEventListener('resize', onResizeHandler);
+
+// Also listen to visualViewport resize for mobile URL bar changes (#63)
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', onResizeHandler);
+}
+
 resizeCanvas();
+
+// --------------- Coordinate Helper (#63) ---------------
+// Convert client coordinates to canvas-buffer space, accounting for CSS-to-canvas scaling
+function getCanvasCoords(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+        return { sx: 0, sy: 0 };
+    }
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+        sx: (clientX - rect.left) * scaleX,
+        sy: (clientY - rect.top) * scaleY
+    };
+}
 
 // --------------- Sound Manager (Web Audio API) (#28) ---------------
 const Sound = (function() {
@@ -1475,9 +1499,7 @@ function handleGameClick(screenX, screenY) {
 
 // --- Mouse events ---
 canvas.addEventListener('mousedown', function(e) {
-    const rect = canvas.getBoundingClientRect();
-    const sx = e.clientX - rect.left;
-    const sy = e.clientY - rect.top;
+    const { sx, sy } = getCanvasCoords(e.clientX, e.clientY);
 
     if (game.state === 'MENU' || game.state === 'GAME_OVER' || game.state === 'PAUSED_LEVELUP' || game.state === 'PAUSED_CHEST') {
         handleGameClick(sx, sy);
@@ -1495,9 +1517,7 @@ canvas.addEventListener('mousedown', function(e) {
 });
 
 canvas.addEventListener('mousemove', function(e) {
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    const { sx: mx, sy: my } = getCanvasCoords(e.clientX, e.clientY);
 
     // Hover detection for level-up cards
     if (game.state === 'PAUSED_LEVELUP') {
@@ -1521,14 +1541,12 @@ canvas.addEventListener('mouseup', function() {
     isDragging = false;
 });
 
-// --- Touch events (#18, #24, #60) ---
+// --- Touch events (#18, #24, #60, #63) ---
 canvas.addEventListener('touchstart', function(e) {
     e.preventDefault();
     touchHandledThisFrame = true; // Mark touch as handled for this frame (#60)
-    const rect = canvas.getBoundingClientRect();
     const touch = e.touches[0];
-    const sx = touch.clientX - rect.left;
-    const sy = touch.clientY - rect.top;
+    const { sx, sy } = getCanvasCoords(touch.clientX, touch.clientY);
 
     if (game.state === 'MENU' || game.state === 'GAME_OVER' || game.state === 'PAUSED_LEVELUP' || game.state === 'PAUSED_CHEST') {
         handleGameClick(sx, sy);
@@ -1548,10 +1566,10 @@ canvas.addEventListener('touchstart', function(e) {
 canvas.addEventListener('touchmove', function(e) {
     e.preventDefault();
     if (isDragging && game.state === 'PLAYING') {
-        const rect = canvas.getBoundingClientRect();
         const touch = e.touches[0];
-        const worldX = (touch.clientX - rect.left) + game.camera.x;
-        const worldY = (touch.clientY - rect.top) + game.camera.y;
+        const { sx, sy } = getCanvasCoords(touch.clientX, touch.clientY);
+        const worldX = sx + game.camera.x;
+        const worldY = sy + game.camera.y;
         player.targetX = worldX;
         player.targetY = worldY;
         player.moving = true;
@@ -1563,25 +1581,21 @@ canvas.addEventListener('touchend', function(e) {
     // Fallback: dispatch click for modal states if touchstart didn't fire (#60)
     if (game.state === 'PAUSED_LEVELUP' || game.state === 'PAUSED_CHEST') {
         if (e.changedTouches.length > 0) {
-            const rect = canvas.getBoundingClientRect();
             const touch = e.changedTouches[0];
-            const sx = touch.clientX - rect.left;
-            const sy = touch.clientY - rect.top;
+            const { sx, sy } = getCanvasCoords(touch.clientX, touch.clientY);
             handleGameClick(sx, sy);
         }
     }
     isDragging = false;
 }, { passive: false });
 
-// --- Pointer events fallback (#60) ---
+// --- Pointer events fallback (#60, #63) ---
 canvas.addEventListener('pointerdown', function(e) {
     // Skip if touch was already handled this frame (prevents double-fire)
     if (e.pointerType === 'touch' && touchHandledThisFrame) {
         return;
     }
-    const rect = canvas.getBoundingClientRect();
-    const sx = e.clientX - rect.left;
-    const sy = e.clientY - rect.top;
+    const { sx, sy } = getCanvasCoords(e.clientX, e.clientY);
 
     if (game.state === 'MENU' || game.state === 'GAME_OVER' || game.state === 'PAUSED_LEVELUP' || game.state === 'PAUSED_CHEST') {
         handleGameClick(sx, sy);
@@ -3229,13 +3243,14 @@ init();
         return r && px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
     }
 
-    // Build overlay container
+    // Build overlay container - positioned at top to avoid overlapping Confirm button (#63)
     const box = document.createElement('div');
     box.id = 'debugOverlay';
     box.style.cssText = [
         'position:fixed',
+        'top:8px',
         'left:8px',
-        'bottom:8px',
+        'bottom:auto',
         'z-index:99999',
         'font:11px/1.25 ui-monospace,SFMono-Regular,Menlo,monospace',
         'color:#fff',
@@ -3262,7 +3277,14 @@ init();
 
     function formatLine(e) {
         const pd = e.pd ? 'Y' : 'n';
-        return `${e.type.padEnd(11)} @${e.cx},${e.cy} st=${e.state} btn=${e.btn} pd=${pd}`;
+        // Extended diagnostics for hit-test debugging (#63)
+        let extra = '';
+        if ((e.state === 'PAUSED_LEVELUP' || e.state === 'PAUSED_CHEST') && e.btnRect) {
+            const br = e.btnRect;
+            const inside = e.sx >= br.x && e.sx <= br.x + br.w && e.sy >= br.y && e.sy <= br.y + br.h;
+            extra = ` btnRect=${br.x.toFixed(0)},${br.y.toFixed(0)},${br.w},${br.h} tap=${e.sx.toFixed(1)},${e.sy.toFixed(1)} in=${inside ? 'Y' : 'n'} dpr=${e.dpr} cw=${e.cw} ch=${e.ch} bw=${e.bw} bh=${e.bh} ih=${e.ih}`;
+        }
+        return `${e.type.padEnd(11)} @${e.cx},${e.cy} st=${e.state} btn=${e.btn} pd=${pd}${extra}`;
     }
 
     function extractCoords(ev) {
@@ -3280,21 +3302,40 @@ init();
         return { cx: -1, cy: -1 };
     }
 
-    function relativeToCanvas(cx, cy) {
+    function getCanvasMetrics() {
         const rect = canvas.getBoundingClientRect();
-        return { sx: cx - rect.left, sy: cy - rect.top };
+        return {
+            dpr: window.devicePixelRatio || 1,
+            cw: canvas.clientWidth,
+            ch: canvas.clientHeight,
+            bw: canvas.width,
+            bh: canvas.height,
+            ih: window.innerHeight,
+            rectW: rect.width,
+            rectH: rect.height
+        };
     }
 
     function log(ev) {
         const { cx, cy } = extractCoords(ev);
-        const { sx, sy } = relativeToCanvas(cx, cy);
+        // Use scaled canvas coordinates (#63)
+        const { sx, sy } = getCanvasCoords(cx, cy);
         const r = confirmBtnRect();
+        const m = getCanvasMetrics();
         const entry = {
             type: ev.type,
             cx, cy,
+            sx, sy,
             state: (typeof game !== 'undefined' && game && game.state) ? game.state : '?',
             btn: pointInRect(sx, sy, r) ? 'Y' : 'n',
+            btnRect: r,
             pd: ev.defaultPrevented,
+            dpr: m.dpr,
+            cw: m.cw,
+            ch: m.ch,
+            bw: m.bw,
+            bh: m.bh,
+            ih: m.ih
         };
         ring.unshift(entry);
         if (ring.length > MAX) ring.pop();
