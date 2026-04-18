@@ -571,6 +571,157 @@ const POWERUPS = [
     },
 ];
 
+// --------------- Super Powerups (#55) ---------------
+// Super upgrade constants
+const SUPER_BEAM_AURA_RADIUS_BASE = 50;
+const SUPER_BEAM_AURA_RADIUS_STEP = 10;
+const SUPER_BEAM_AURA_DMG_BASE = 10;
+const SUPER_BEAM_AURA_DMG_STEP = 5;
+const SUPER_BULWARK_REDUCTION_BASE = 0.15;
+const SUPER_BULWARK_HEAL_BASE = 30;
+const SUPER_BULWARK_HEAL_STEP = 15;
+const SUPER_BULWARK_COOLDOWN_BASE = 15;
+const SUPER_BULWARK_COOLDOWN_STEP = 2;
+const SUPER_VACUUM_RADIUS_BASE = 200;
+const SUPER_VACUUM_RADIUS_STEP = 30;
+const SUPER_VACUUM_EXPLOSION_RADIUS_BASE = 40;
+const SUPER_VACUUM_EXPLOSION_RADIUS_STEP = 10;
+const SUPER_ARC_DAMAGE_BASE = 15;
+const SUPER_ARC_DAMAGE_STEP = 8;
+const SUPER_ARC_RANGE_BASE = 150;
+const SUPER_ARC_RANGE_STEP = 20;
+const SUPER_STORM_RADIUS_BASE = 80;
+const SUPER_STORM_RADIUS_STEP = 15;
+const SUPER_STORM_SPEED_MULT_BASE = 1.3;
+const SUPER_STORM_SPEED_MULT_STEP = 0.2;
+const SUPER_STORM_BURST_SPEED_BASE = 1.5;
+const SUPER_STORM_BURST_SPEED_STEP = 0.25;
+const SUPER_STORM_BURST_DURATION = 0.5;
+
+const SUPER_POWERUPS = [
+    {
+        id: 'radiantBeam',
+        name: 'Radiant Beam',
+        description: 'Beam gains aura damage along its length',
+        color: '#ff66cc',
+        level: 0,
+        isSuper: true,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const radius = SUPER_BEAM_AURA_RADIUS_BASE + ((lvl - 1) * SUPER_BEAM_AURA_RADIUS_STEP);
+            const dmg = SUPER_BEAM_AURA_DMG_BASE + ((lvl - 1) * SUPER_BEAM_AURA_DMG_STEP);
+            const nextRadius = radius + SUPER_BEAM_AURA_RADIUS_STEP;
+            const nextDmg = dmg + SUPER_BEAM_AURA_DMG_STEP;
+            return 'Aura R:' + radius + ' D:' + dmg + ' → R:' + nextRadius + ' D:' + nextDmg;
+        },
+        apply: function() {
+            this.level++;
+            if (!player.weapons.includes('radiant_beam')) {
+                player.weapons.push('radiant_beam');
+            }
+            player.radiantBeamLevel = this.level;
+        },
+    },
+    {
+        id: 'bulwark',
+        name: 'Bulwark',
+        description: '+15% damage reduction + emergency heal below 25% HP',
+        color: '#6688aa',
+        level: 0,
+        isSuper: true,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const heal = SUPER_BULWARK_HEAL_BASE + ((lvl - 1) * SUPER_BULWARK_HEAL_STEP);
+            const cd = Math.max(5, SUPER_BULWARK_COOLDOWN_BASE - ((lvl - 1) * SUPER_BULWARK_COOLDOWN_STEP));
+            const nextHeal = heal + SUPER_BULWARK_HEAL_STEP;
+            const nextCd = Math.max(5, cd - SUPER_BULWARK_COOLDOWN_STEP);
+            return 'Heal ' + heal + ' CD ' + cd + 's → Heal ' + nextHeal + ' CD ' + nextCd + 's';
+        },
+        apply: function() {
+            this.level++;
+            player.bulwarkLevel = this.level;
+        },
+    },
+    {
+        id: 'vacuumNova',
+        name: 'Vacuum Nova',
+        description: 'Explosions pull XP gems and chain secondary blasts',
+        color: '#ffaa44',
+        level: 0,
+        isSuper: true,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const radius = SUPER_VACUUM_RADIUS_BASE + ((lvl - 1) * SUPER_VACUUM_RADIUS_STEP);
+            const expRadius = SUPER_VACUUM_EXPLOSION_RADIUS_BASE + ((lvl - 1) * SUPER_VACUUM_EXPLOSION_RADIUS_STEP);
+            const nextRadius = radius + SUPER_VACUUM_RADIUS_STEP;
+            const nextExpRadius = expRadius + SUPER_VACUUM_EXPLOSION_RADIUS_STEP;
+            return 'Pull ' + radius + ' Chain R:' + expRadius + ' → Pull ' + nextRadius + ' Chain R:' + nextExpRadius;
+        },
+        apply: function() {
+            this.level++;
+            player.vacuumNovaLevel = this.level;
+        },
+    },
+    {
+        id: 'arcLance',
+        name: 'Arc Lance',
+        description: 'Piercing bolts chain lightning to nearby enemies',
+        color: '#44aaff',
+        level: 0,
+        isSuper: true,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const dmg = SUPER_ARC_DAMAGE_BASE + ((lvl - 1) * SUPER_ARC_DAMAGE_STEP);
+            const range = SUPER_ARC_RANGE_BASE + ((lvl - 1) * SUPER_ARC_RANGE_STEP);
+            const nextDmg = dmg + SUPER_ARC_DAMAGE_STEP;
+            const nextRange = range + SUPER_ARC_RANGE_STEP;
+            return 'Arc D:' + dmg + ' R:' + range + ' → D:' + nextDmg + ' R:' + nextRange;
+        },
+        apply: function() {
+            this.level++;
+            player.arcLanceLevel = this.level;
+        },
+    },
+    {
+        id: 'stormdancer',
+        name: 'Stormdancer',
+        description: 'Faster, larger orbit orbs; hits grant speed burst',
+        color: '#aa66ff',
+        level: 0,
+        isSuper: true,
+        describe: function(lvl) {
+            if (lvl === 0) return this.description;
+            const radius = SUPER_STORM_RADIUS_BASE + ((lvl - 1) * SUPER_STORM_RADIUS_STEP);
+            const speedMult = SUPER_STORM_SPEED_MULT_BASE + ((lvl - 1) * SUPER_STORM_SPEED_MULT_STEP);
+            const burst = SUPER_STORM_BURST_SPEED_BASE + ((lvl - 1) * SUPER_STORM_BURST_SPEED_STEP);
+            const nextRadius = radius + SUPER_STORM_RADIUS_STEP;
+            const nextSpeedMult = speedMult + SUPER_STORM_SPEED_MULT_STEP;
+            const nextBurst = burst + SUPER_STORM_BURST_SPEED_STEP;
+            return 'R:' + radius + ' SPD×' + speedMult.toFixed(1) + ' BURST+' + Math.round((burst - 1) * 100) + '% → R:' + nextRadius + ' SPD×' + nextSpeedMult.toFixed(1) + ' BURST+' + Math.round((nextBurst - 1) * 100) + '%';
+        },
+        apply: function() {
+            this.level++;
+            if (!player.weapons.includes('stormdancer_orbit')) {
+                player.weapons.push('stormdancer_orbit');
+            }
+            player.stormdancerLevel = this.level;
+        },
+    },
+];
+
+// Super powerup parent pairs mapping
+const SUPER_PAIRS = {
+    radiantBeam: ['beam', 'aura'],
+    bulwark: ['armor', 'regen'],
+    vacuumNova: ['explosion', 'xpRange'],
+    arcLance: ['piercing', 'spark'],
+    stormdancer: ['orbit', 'moveSpeed'],
+};
+
+// Global super unlock tracking
+let superUnlocked = {};
+let superUnlockQueue = [];
+
 // --------------- Game State ---------------
 let game, player, enemies, projectiles, xpGems, particles, levelUpCards, chests, explosions, beams;
 let rewardDialog = null; // { upgrades: [...], headerText: string, celebrationRarity: string, openTime: number }
@@ -625,6 +776,17 @@ function resetGameState() {
         piercingBoltLevel: 0,
         orbitShieldLevel: 0,
         sparkLevel: 0,
+        // Super powerup levels (#55)
+        radiantBeamLevel: 0,
+        bulwarkLevel: 0,
+        vacuumNovaLevel: 0,
+        arcLanceLevel: 0,
+        stormdancerLevel: 0,
+        // Bulwark cooldown tracking
+        bulwarkLastHealTime: -999,
+        // Stormdancer speed burst tracking
+        stormdancerBurstTimer: 0,
+        stormdancerSpeedMult: 1,
     };
 
     enemies = [];
@@ -637,15 +799,73 @@ function resetGameState() {
     chests = [];
     explosions = [];
     beams = [];
+    window.arcLanceArcs = []; // #55 Arc Lance visual arcs
     enemyIdCounter = 0;
 
     // Reset powerup levels for new game (#43)
     for (const p of POWERUPS) {
         p.level = 0;
     }
+    // Reset super powerup levels for new game (#55)
+    for (const s of SUPER_POWERUPS) {
+        s.level = 0;
+    }
+    superUnlocked = {};
+    superUnlockQueue = [];
 }
 
 resetGameState();
+
+// --------------- Super Unlock Detection (#55) ---------------
+function getPowerupById(id) {
+    for (const p of POWERUPS) {
+        if (p.id === id) return p;
+    }
+    for (const s of SUPER_POWERUPS) {
+        if (s.id === id) return s;
+    }
+    return null;
+}
+
+function checkSuperUnlocks() {
+    // Check each super pair - if both parents are L5 and super not yet unlocked
+    for (const superId in SUPER_PAIRS) {
+        if (superUnlocked[superId]) continue;
+        
+        const parents = SUPER_PAIRS[superId];
+        const parentA = getPowerupById(parents[0]);
+        const parentB = getPowerupById(parents[1]);
+        
+        if (parentA && parentB && parentA.level >= 5 && parentB.level >= 5) {
+            // Set unlock flag BEFORE any dialog to prevent double-award
+            superUnlocked[superId] = true;
+            
+            const superPowerup = getPowerupById(superId);
+            if (superPowerup) {
+                // Apply the super at L1
+                superPowerup.apply();
+                
+                // Queue the reward dialog
+                superUnlockQueue.push({
+                    upgrades: [superPowerup],
+                    headerText: 'SUPER UPGRADE UNLOCKED',
+                    celebrationRarity: 'rare',
+                });
+            }
+        }
+    }
+    
+    // Process queue if not currently showing a dialog
+    processSuperUnlockQueue();
+}
+
+function processSuperUnlockQueue() {
+    if (superUnlockQueue.length === 0) return;
+    if (rewardDialog) return; // Already showing a dialog, wait for it to close
+    
+    const nextReward = superUnlockQueue.shift();
+    showRewardDialog(nextReward);
+}
 
 // --------------- High Score ---------------
 function getHighScore() {
@@ -849,6 +1069,7 @@ function firePiercingBolt() {
             bouncesRemaining: 0,
             color: '#ff8844',
             hitEnemies: new Set(),
+            isPiercing: true, // #55 Arc Lance detection
         });
     }
 }
@@ -903,6 +1124,37 @@ function generateLevelUpCards() {
     selectedPowerupIndex = -1;
     levelUpOpenTime = performance.now();
 
+    // Build eligible pool: regular powerups + unlocked supers (#55)
+    const eligiblePowerups = [];
+    for (const p of POWERUPS) {
+        if (p.level < 5) {
+            eligiblePowerups.push(p);
+        }
+    }
+    for (const s of SUPER_POWERUPS) {
+        if (superUnlocked[s.id] && s.level < 5) {
+            eligiblePowerups.push(s);
+        }
+    }
+
+    // Shuffle and dedup to get CARD_COUNT unique powerups
+    const shuffled = eligiblePowerups.slice().sort(function() { return Math.random() - 0.5; });
+    const selected = [];
+    const seenIds = {};
+    for (const p of shuffled) {
+        if (!seenIds[p.id]) {
+            seenIds[p.id] = true;
+            selected.push(p);
+            if (selected.length >= CARD_COUNT) break;
+        }
+    }
+
+    // If we don't have enough unique powerups, fill with random ones (may show duplicates)
+    while (selected.length < CARD_COUNT && eligiblePowerups.length > 0) {
+        const p = eligiblePowerups[Math.floor(Math.random() * eligiblePowerups.length)];
+        selected.push(p);
+    }
+
     if (isPortrait) {
         // Portrait/mobile: stack cards vertically with smaller dimensions
         const cardW = Math.min(CARD_WIDTH, canvas.width * 0.7);
@@ -912,8 +1164,8 @@ function generateLevelUpCards() {
         const startX = (canvas.width - cardW) / 2;
         const startY = (canvas.height - totalHeight) / 2 + 30;
 
-        for (let i = 0; i < CARD_COUNT; i++) {
-            const powerup = POWERUPS[Math.floor(Math.random() * POWERUPS.length)];
+        for (let i = 0; i < selected.length; i++) {
+            const powerup = selected[i];
             const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
                 x: startX,
@@ -931,8 +1183,8 @@ function generateLevelUpCards() {
         const startX = (canvas.width - totalWidth) / 2;
         const startY = (canvas.height - CARD_HEIGHT) / 2;
 
-        for (let i = 0; i < CARD_COUNT; i++) {
-            const powerup = POWERUPS[Math.floor(Math.random() * POWERUPS.length)];
+        for (let i = 0; i < selected.length; i++) {
+            const powerup = selected[i];
             const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
                 x: startX + i * (CARD_WIDTH + CARD_GAP),
@@ -1009,6 +1261,8 @@ function handleLevelUpClick(clickX, clickY) {
         if (clickX >= btnX && clickX <= btnX + btnW &&
             clickY >= btnY && clickY <= btnY + btnH) {
             levelUpCards[selectedPowerupIndex].powerup.apply();
+            // Check for super unlocks after any powerup apply (#55)
+            checkSuperUnlocks();
             game.state = 'PLAYING';
             levelUpCards = [];
             selectedPowerupIndex = -1;
@@ -1160,6 +1414,8 @@ function handleRewardDialogClick(clickX, clickY) {
 function closeRewardDialog() {
     rewardDialog = null;
     game.state = 'PLAYING';
+    // Process any queued super unlocks (#55)
+    processSuperUnlockQueue();
 }
 
 function dismissRewardDialogWithKeyboard() {
@@ -1447,6 +1703,9 @@ function updateChests(dt) {
                 celebrationRarity: chest.rarity,
             });
 
+            // Check for super unlocks after chest awards (#55)
+            checkSuperUnlocks();
+
             chests.splice(i, 1);
         }
     }
@@ -1576,7 +1835,9 @@ function update(dt) {
             player.y = player.targetY;
             player.moving = false;
         } else {
-            const step = player.speed * dt;
+            // #55 Stormdancer speed burst
+            const speedMult = player.stormdancerSpeedMult || 1;
+            const step = player.speed * speedMult * dt;
             if (step >= d) {
                 player.x = player.targetX;
                 player.y = player.targetY;
@@ -1587,6 +1848,14 @@ function update(dt) {
             }
         }
 
+    }
+
+    // #55 Stormdancer speed burst decay
+    if (player.stormdancerBurstTimer > 0) {
+        player.stormdancerBurstTimer -= dt;
+        if (player.stormdancerBurstTimer <= 0) {
+            player.stormdancerSpeedMult = 1;
+        }
     }
 
     // Enemy spawning (#3) with scaling (#12)
@@ -1622,10 +1891,33 @@ function update(dt) {
         const enemy = enemies[idx];
         if (circlesOverlap(player, enemy)) {
             if (now >= player.invincibleUntil) {
-                const dmgAfterArmor = Math.max(1, contactDamage * (1 - player.armor));
+                // Calculate damage reduction from armor and bulwark (#55)
+                let reduction = player.armor;
+                if (player.bulwarkLevel > 0) {
+                    reduction += SUPER_BULWARK_REDUCTION_BASE;
+                }
+                reduction = Math.min(0.80, reduction); // Cap at 80% total
+                
+                const dmgAfterArmor = Math.max(1, contactDamage * (1 - reduction));
                 player.hp -= dmgAfterArmor;
                 Sound.playDamage();
                 triggerScreenShake();
+                
+                // #55 Bulwark: emergency heal when HP drops below 25%
+                if (player.bulwarkLevel > 0) {
+                    const hpPercent = player.hp / player.maxHp;
+                    if (hpPercent < 0.25) {
+                        const cooldown = Math.max(5, SUPER_BULWARK_COOLDOWN_BASE - (player.bulwarkLevel - 1) * SUPER_BULWARK_COOLDOWN_STEP);
+                        if (now - player.bulwarkLastHealTime >= cooldown) {
+                            const healAmount = SUPER_BULWARK_HEAL_BASE + (player.bulwarkLevel - 1) * SUPER_BULWARK_HEAL_STEP;
+                            player.hp = Math.min(player.maxHp, player.hp + healAmount);
+                            player.bulwarkLastHealTime = now;
+                            // Visual feedback
+                            spawnDamageNumber(player.x, player.y - player.radius, healAmount);
+                        }
+                    }
+                }
+                
                 if (player.hp <= 0) {
                     player.hp = 0;
                     setHighScore(game.survivalTime);
@@ -1663,15 +1955,27 @@ function update(dt) {
         }
     }
 
-    // Orbit Shield (#11, #43)
-    if (player.weapons.includes('orbit_shield')) {
-        game.orbitAngle += (2 * Math.PI / ORBIT_PERIOD) * dt;
-        // Orb count increases with orbitShieldLevel: 4 + (level - 1)
-        const orbCount = ORBIT_ORB_COUNT + Math.max(0, player.orbitShieldLevel - 1);
+    // Orbit Shield (#11, #43, #55)
+    if (player.weapons.includes('orbit_shield') || player.weapons.includes('stormdancer_orbit')) {
+        // Stormdancer modifies orbit speed and radius
+        let orbitSpeedMult = 1;
+        let orbitRadius = ORBIT_RADIUS;
+        let orbCount = ORBIT_ORB_COUNT;
+        
+        if (player.stormdancerLevel > 0) {
+            orbitSpeedMult = SUPER_STORM_SPEED_MULT_BASE + (player.stormdancerLevel - 1) * SUPER_STORM_SPEED_MULT_STEP;
+            orbitRadius = SUPER_STORM_RADIUS_BASE + (player.stormdancerLevel - 1) * SUPER_STORM_RADIUS_STEP;
+        }
+        if (player.weapons.includes('orbit_shield')) {
+            orbCount = ORBIT_ORB_COUNT + Math.max(0, player.orbitShieldLevel - 1);
+        }
+        
+        game.orbitAngle += (2 * Math.PI / ORBIT_PERIOD) * dt * orbitSpeedMult;
+        
         for (let i = 0; i < orbCount; i++) {
             const angle = game.orbitAngle + (i * Math.PI * 2 / orbCount);
-            const orbX = player.x + Math.cos(angle) * ORBIT_RADIUS;
-            const orbY = player.y + Math.sin(angle) * ORBIT_RADIUS;
+            const orbX = player.x + Math.cos(angle) * orbitRadius;
+            const orbY = player.y + Math.sin(angle) * orbitRadius;
             const orb = { x: orbX, y: orbY, radius: ORBIT_ORB_RADIUS };
 
             const nearbyOrb = queryNearby(enemyGrid, orbX, orbY, ORBIT_ORB_RADIUS + ENEMY_RADIUS);
@@ -1685,6 +1989,13 @@ function update(dt) {
                         enemy.hp -= ORBIT_DAMAGE;
                         enemy.flashTimer = 0.05;
                         spawnDamageNumber(enemy.x, enemy.y - enemy.radius, ORBIT_DAMAGE);
+                        
+                        // #55 Stormdancer: speed burst on orb hit when 4+ orbs active
+                        if (player.stormdancerLevel > 0 && orbCount >= 4) {
+                            const burstMult = SUPER_STORM_BURST_SPEED_BASE + (player.stormdancerLevel - 1) * SUPER_STORM_BURST_SPEED_STEP;
+                            player.stormdancerBurstTimer = SUPER_STORM_BURST_DURATION;
+                            player.stormdancerSpeedMult = burstMult;
+                        }
                     }
                 }
             }
@@ -1720,6 +2031,38 @@ function update(dt) {
 
                 if (player.explosionRadius > 0) {
                     triggerExplosion(enemy.x, enemy.y, player.explosionRadius, p.damage * EXPLOSION_DAMAGE_FRAC, enemy.id, enemyGrid);
+                }
+
+                // #55 Arc Lance: chain lightning from piercing bolt hits
+                if (player.arcLanceLevel > 0 && p.isPiercing) {
+                    const arcRange = SUPER_ARC_RANGE_BASE + (player.arcLanceLevel - 1) * SUPER_ARC_RANGE_STEP;
+                    const arcDamage = SUPER_ARC_DAMAGE_BASE + (player.arcLanceLevel - 1) * SUPER_ARC_DAMAGE_STEP;
+                    // Find nearest enemy to the hit enemy (excluding the one just hit)
+                    let nearest = null;
+                    let nearestDistSq = arcRange * arcRange;
+                    for (const other of enemies) {
+                        if (other.id === enemy.id) continue;
+                        const odx = other.x - enemy.x;
+                        const ody = other.y - enemy.y;
+                        const odistSq = odx * odx + ody * ody;
+                        if (odistSq < nearestDistSq) {
+                            nearestDistSq = odistSq;
+                            nearest = other;
+                        }
+                    }
+                    if (nearest) {
+                        nearest.hp -= arcDamage;
+                        nearest.flashTimer = 0.05;
+                        spawnDamageNumber(nearest.x, nearest.y - nearest.radius, arcDamage);
+                        // Visual arc (store for rendering)
+                        if (!window.arcLanceArcs) window.arcLanceArcs = [];
+                        window.arcLanceArcs.push({
+                            x1: enemy.x, y1: enemy.y,
+                            x2: nearest.x, y2: nearest.y,
+                            lifetime: 0.15,
+                            maxLifetime: 0.15,
+                        });
+                    }
                 }
 
 
@@ -1880,6 +2223,33 @@ function update(dt) {
                     spawnDamageNumber(target.x, target.y - target.radius, dps * 0.25);
                 }
                 beams.push({ x1: player.x, y1: player.y, x2: target.x, y2: target.y });
+
+                // #55 Radiant Beam: aura damage along beam length
+                if (player.radiantBeamLevel > 0) {
+                    const auraRadius = SUPER_BEAM_AURA_RADIUS_BASE + (player.radiantBeamLevel - 1) * SUPER_BEAM_AURA_RADIUS_STEP;
+                    const auraDamage = (SUPER_BEAM_AURA_DMG_BASE + (player.radiantBeamLevel - 1) * SUPER_BEAM_AURA_DMG_STEP) * dt;
+                    // Sample points along the beam line
+                    const steps = Math.ceil(dist / 30);
+                    for (let s = 0; s <= steps; s++) {
+                        const t = s / steps;
+                        const sx = player.x + dx * t;
+                        const sy = player.y + dy * t;
+                        const nearbyBeam = queryNearby(enemyGrid, sx, sy, auraRadius + ENEMY_RADIUS);
+                        for (const idx of nearbyBeam) {
+                            const e = enemies[idx];
+                            if (!e) continue;
+                            // Check if enemy is within aura radius of the beam sample point
+                            const edx = e.x - sx;
+                            const edy = e.y - sy;
+                            if (edx * edx + edy * edy <= auraRadius * auraRadius) {
+                                // Avoid double-damage on the main target
+                                if (e === target) continue;
+                                e.hp -= auraDamage;
+                                e.flashTimer = 0.05;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1908,19 +2278,64 @@ function update(dt) {
 // #26 AoE explosion helper
 function triggerExplosion(cx, cy, radius, damage, sourceEnemyId, enemyGrid) {
     const nearby = queryNearby(enemyGrid, cx, cy, radius + ENEMY_RADIUS);
+    let furthestEnemy = null;
+    let furthestDistSq = 0;
+    
     for (const idx of nearby) {
         const e = enemies[idx];
         if (!e) continue;
         if (e.id === sourceEnemyId) continue;
         const dx = e.x - cx;
         const dy = e.y - cy;
-        if (dx * dx + dy * dy <= (radius + e.radius) * (radius + e.radius)) {
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= (radius + e.radius) * (radius + e.radius)) {
             e.hp -= damage;
             e.flashTimer = 0.05;
             spawnDamageNumber(e.x, e.y - e.radius, damage);
+            
+            // Track furthest enemy for Vacuum Nova chain
+            if (distSq > furthestDistSq) {
+                furthestDistSq = distSq;
+                furthestEnemy = e;
+            }
         }
     }
     explosions.push({ x: cx, y: cy, radius: 0, maxRadius: radius, lifetime: EXPLOSION_VISUAL_LIFETIME, maxLifetime: EXPLOSION_VISUAL_LIFETIME, color: EXPLOSION_COLOR });
+    
+    // #55 Vacuum Nova: pull XP gems and chain secondary explosion
+    if (player.vacuumNovaLevel > 0) {
+        const vacuumRadius = SUPER_VACUUM_RADIUS_BASE + (player.vacuumNovaLevel - 1) * SUPER_VACUUM_RADIUS_STEP;
+        // Pull XP gems toward player
+        for (const gem of xpGems) {
+            const gdx = gem.x - player.x;
+            const gdy = gem.y - player.y;
+            if (gdx * gdx + gdy * gdy <= vacuumRadius * vacuumRadius) {
+                const dir = normalize(player.x - gem.x, player.y - gem.y);
+                gem.x += dir.x * XP_GEM_MAGNET_SPEED * 0.5; // Pull speed
+                gem.y += dir.y * XP_GEM_MAGNET_SPEED * 0.5;
+            }
+        }
+        
+        // Chain secondary explosion on furthest enemy hit
+        if (furthestEnemy) {
+            const chainRadius = SUPER_VACUUM_EXPLOSION_RADIUS_BASE + (player.vacuumNovaLevel - 1) * SUPER_VACUUM_EXPLOSION_RADIUS_STEP;
+            const chainDamage = damage * 0.5;
+            const chainNearby = queryNearby(enemyGrid, furthestEnemy.x, furthestEnemy.y, chainRadius + ENEMY_RADIUS);
+            for (const idx of chainNearby) {
+                const e = enemies[idx];
+                if (!e) continue;
+                if (e.id === furthestEnemy.id) continue; // Don't hit the source again
+                const edx = e.x - furthestEnemy.x;
+                const edy = e.y - furthestEnemy.y;
+                if (edx * edx + edy * edy <= chainRadius * chainRadius) {
+                    e.hp -= chainDamage;
+                    e.flashTimer = 0.05;
+                    spawnDamageNumber(e.x, e.y - e.radius, chainDamage);
+                }
+            }
+            explosions.push({ x: furthestEnemy.x, y: furthestEnemy.y, radius: 0, maxRadius: chainRadius, lifetime: EXPLOSION_VISUAL_LIFETIME, maxLifetime: EXPLOSION_VISUAL_LIFETIME, color: '#ff6644' });
+        }
+    }
 }
 
 // --------------- Render ---------------
@@ -1990,17 +2405,24 @@ function render() {
         ctx.fill();
     }
 
-    // Draw orbit shield orbs (#11, #43)
-    if (player.weapons.includes('orbit_shield')) {
-        const orbCount = ORBIT_ORB_COUNT + Math.max(0, player.orbitShieldLevel - 1);
+    // Draw orbit shield orbs (#11, #43, #55)
+    if (player.weapons.includes('orbit_shield') || player.weapons.includes('stormdancer_orbit')) {
+        let orbitRadius = ORBIT_RADIUS;
+        let orbCount = ORBIT_ORB_COUNT;
+        if (player.stormdancerLevel > 0) {
+            orbitRadius = SUPER_STORM_RADIUS_BASE + (player.stormdancerLevel - 1) * SUPER_STORM_RADIUS_STEP;
+        }
+        if (player.weapons.includes('orbit_shield')) {
+            orbCount = ORBIT_ORB_COUNT + Math.max(0, player.orbitShieldLevel - 1);
+        }
         for (let i = 0; i < orbCount; i++) {
             const angle = game.orbitAngle + (i * Math.PI * 2 / orbCount);
-            const orbX = player.x + Math.cos(angle) * ORBIT_RADIUS;
-            const orbY = player.y + Math.sin(angle) * ORBIT_RADIUS;
-            const sp = worldToScreen(orbX, orbY);
-            ctx.fillStyle = ORBIT_COLOR;
+            const orbX = player.x + Math.cos(angle) * orbitRadius;
+            const orbY = player.y + Math.sin(angle) * orbitRadius;
+            const spOrb = worldToScreen(orbX, orbY);
+            ctx.fillStyle = player.stormdancerLevel > 0 ? '#aa66ff' : ORBIT_COLOR;
             ctx.beginPath();
-            ctx.arc(sp.x, sp.y, ORBIT_ORB_RADIUS, 0, Math.PI * 2);
+            ctx.arc(spOrb.x, spOrb.y, ORBIT_ORB_RADIUS, 0, Math.PI * 2);
             ctx.fill();
         }
     }
@@ -2073,6 +2495,36 @@ function render() {
         ctx.lineTo(s2.x, s2.y);
         ctx.stroke();
         ctx.shadowBlur = 0;
+    }
+
+    // #55 Arc Lance: render chain lightning arcs
+    if (window.arcLanceArcs) {
+        for (let i = window.arcLanceArcs.length - 1; i >= 0; i--) {
+            const arc = window.arcLanceArcs[i];
+            arc.lifetime -= 0.016; // approximate dt for render
+            if (arc.lifetime <= 0) {
+                window.arcLanceArcs.splice(i, 1);
+                continue;
+            }
+            const a1 = worldToScreen(arc.x1, arc.y1);
+            const a2 = worldToScreen(arc.x2, arc.y2);
+            const alpha = arc.lifetime / arc.maxLifetime;
+            ctx.strokeStyle = '#44aaff';
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = alpha;
+            ctx.shadowColor = '#44aaff';
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.moveTo(a1.x, a1.y);
+            // Draw jagged line
+            const midX = (a1.x + a2.x) / 2 + (Math.random() - 0.5) * 10;
+            const midY = (a1.y + a2.y) / 2 + (Math.random() - 0.5) * 10;
+            ctx.lineTo(midX, midY);
+            ctx.lineTo(a2.x, a2.y);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
     }
 
     // #26 Armor glow
@@ -2253,17 +2705,57 @@ function renderLevelUpScreen() {
         const card = levelUpCards[i];
         const isSelected = (i === selectedPowerupIndex);
 
-        ctx.fillStyle = isSelected ? '#2a2a44' : (card.hovered ? '#333333' : '#222222');
+        const isSuper = !!(card.powerup && card.powerup.isSuper);
+        ctx.fillStyle = isSelected ? '#2a2a44' : (card.hovered ? '#333333' : (isSuper ? '#2d2818' : '#222222'));
         ctx.fillRect(card.x, card.y, card.width, card.height);
 
-        if (isSelected) {
-            ctx.shadowColor = card.powerup.color;
-            ctx.shadowBlur = 16;
+        if (isSuper) {
+            ctx.shadowColor = '#ffd700';
+            ctx.shadowBlur = 18;
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 4;
+        } else {
+            if (isSelected) {
+                ctx.shadowColor = card.powerup.color;
+                ctx.shadowBlur = 16;
+            }
+            ctx.strokeStyle = isSelected ? card.powerup.color : (card.hovered ? card.powerup.color : '#555555');
+            ctx.lineWidth = isSelected ? 3 : (card.hovered ? 3 : 1);
         }
-        ctx.strokeStyle = isSelected ? card.powerup.color : (card.hovered ? card.powerup.color : '#555555');
-        ctx.lineWidth = isSelected ? 3 : (card.hovered ? 3 : 1);
         ctx.strokeRect(card.x, card.y, card.width, card.height);
         ctx.shadowBlur = 0;
+
+        // SUPER pill badge in top-right corner
+        if (isSuper) {
+            const pillText = 'SUPER';
+            const pillFontSize = canvas.width < 600 ? 10 : 12;
+            ctx.font = 'bold ' + pillFontSize + 'px sans-serif';
+            const pillPadX = 6;
+            const pillPadY = 3;
+            const pillW = ctx.measureText(pillText).width + pillPadX * 2;
+            const pillH = pillFontSize + pillPadY * 2;
+            const pillR = 10;
+            const pillX = card.x + card.width - pillW - 6;
+            const pillY = card.y + 6;
+            ctx.fillStyle = '#ffd700';
+            ctx.beginPath();
+            ctx.moveTo(pillX + pillR, pillY);
+            ctx.lineTo(pillX + pillW - pillR, pillY);
+            ctx.arcTo(pillX + pillW, pillY, pillX + pillW, pillY + pillR, pillR);
+            ctx.lineTo(pillX + pillW, pillY + pillH - pillR);
+            ctx.arcTo(pillX + pillW, pillY + pillH, pillX + pillW - pillR, pillY + pillH, pillR);
+            ctx.lineTo(pillX + pillR, pillY + pillH);
+            ctx.arcTo(pillX, pillY + pillH, pillX, pillY + pillH - pillR, pillR);
+            ctx.lineTo(pillX, pillY + pillR);
+            ctx.arcTo(pillX, pillY, pillX + pillR, pillY, pillR);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#000000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(pillText, pillX + pillW / 2, pillY + pillH / 2);
+            ctx.textBaseline = 'alphabetic';
+        }
 
         const iconRadius = small ? 16 : 25;
         const iconY = small ? card.y + card.height * 0.3 : card.y + 60;
@@ -2405,12 +2897,24 @@ function renderRewardDialog() {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Header
-    ctx.fillStyle = rarityColor;
-    ctx.font = 'bold ' + (small ? 22 : 32) + 'px sans-serif';
+    // Header (#55: gold pulse for SUPER UPGRADE UNLOCKED)
+    const isSuperUnlock = rewardDialog.headerText === 'SUPER UPGRADE UNLOCKED';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(rewardDialog.headerText, canvas.width / 2, py + (small ? 32 : 44));
+    if (isSuperUnlock) {
+        const baseSize = small ? 22 : 32;
+        const superSize = Math.round(baseSize * 1.15);
+        ctx.fillStyle = '#ffd700';
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 16 + Math.sin((game ? game.survivalTime : 0) * 4) * 6;
+        ctx.font = 'bold ' + superSize + 'px sans-serif';
+        ctx.fillText(rewardDialog.headerText, canvas.width / 2, py + (small ? 32 : 44));
+        ctx.shadowBlur = 0;
+    } else {
+        ctx.fillStyle = rarityColor;
+        ctx.font = 'bold ' + (small ? 22 : 32) + 'px sans-serif';
+        ctx.fillText(rewardDialog.headerText, canvas.width / 2, py + (small ? 32 : 44));
+    }
 
     // Rarity subtitle
     const rarityLabel = rewardDialog.celebrationRarity.charAt(0).toUpperCase() +
@@ -2579,19 +3083,21 @@ function renderHUD() {
     ctx.textAlign = 'center';
     ctx.fillText('Level ' + player.level, canvas.width / 2, xpBarY - (small ? 4 : 6));
 
-    // Owned upgrades list (right side) - #43 stacking upgrades
+    // Owned upgrades list (right side) - #43 stacking upgrades, #55 super upgrades
     const owned = POWERUPS.filter(function(p) { return (p.level || 0) > 0; });
-    if (owned.length > 0) {
+    const ownedSupers = SUPER_POWERUPS.filter(function(s) { return (s.level || 0) > 0; });
+    const allOwned = owned.concat(ownedSupers);
+    if (allOwned.length > 0) {
         const listX = canvas.width - (small ? 10 : 20);
         const lineH = small ? 12 : 15;
         const startY = (small ? 44 : 60);
         ctx.textAlign = 'right';
         ctx.font = 'bold ' + (small ? 10 : 12) + 'px sans-serif';
-        for (let i = 0; i < owned.length; i++) {
-            const p = owned[i];
+        for (let i = 0; i < allOwned.length; i++) {
+            const p = allOwned[i];
             const y = startY + i * lineH;
-            ctx.fillStyle = p.color;
-            ctx.fillText(p.name + ' ×' + p.level, listX, y);
+            ctx.fillStyle = p.isSuper ? '#ffd700' : p.color;
+            ctx.fillText((p.isSuper ? '★ ' : '') + p.name + ' ×' + p.level, listX, y);
         }
     }
 
