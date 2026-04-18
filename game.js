@@ -142,6 +142,9 @@ const REWARD_DIALOG_ITEM_GAP = 10;
 const REWARD_DIALOG_MAX_WIDTH = 500;
 const REWARD_DIALOG_CELEBRATION_DURATION = 3.0;
 
+// Build version for splash screen and cache-busting (#62)
+const BUILD_VERSION = 'v2026-04-18 · r001';
+
 // --------------- Canvas Setup ---------------
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -2684,6 +2687,23 @@ function renderMenuScreen() {
     ctx.fillStyle = '#555555';
     ctx.font = hintSize + 'px sans-serif';
     ctx.fillText(small ? 'Tap to move \u2022 Auto-fire \u2022 Survive!' : 'Click to move \u2022 Auto-fire weapons \u2022 Survive!', canvas.width / 2, canvas.height / 2 + 120);
+
+    // Version string - bottom right (#62)
+    const savedFillStyle = ctx.fillStyle;
+    const savedTextAlign = ctx.textAlign;
+    const savedFont = ctx.font;
+    const savedTextBaseline = ctx.textBaseline;
+
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(BUILD_VERSION, canvas.width - 10, canvas.height - 10);
+
+    ctx.fillStyle = savedFillStyle;
+    ctx.textAlign = savedTextAlign;
+    ctx.font = savedFont;
+    ctx.textBaseline = savedTextBaseline;
 }
 
 // --------------- Game Over Screen (#15) ---------------
