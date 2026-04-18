@@ -125,6 +125,16 @@ const CHEST_MAX_COUNT = 5;
 const CHEST_REWARD_MIN = 1;
 const CHEST_REWARD_MAX = 5;
 
+// Chest Rarity Tiers (#46)
+const CHEST_RARITY_COMMON = 'common';
+const CHEST_RARITY_UNCOMMON = 'uncommon';
+const CHEST_RARITY_RARE = 'rare';
+const CHEST_RARITY_WEIGHTS = [
+    { rarity: CHEST_RARITY_COMMON, weight: 0.70, rewardCount: 1 },
+    { rarity: CHEST_RARITY_UNCOMMON, weight: 0.25, rewardCount: 3 },
+    { rarity: CHEST_RARITY_RARE, weight: 0.05, rewardCount: 5 },
+];
+
 // --------------- Canvas Setup ---------------
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -1166,7 +1176,22 @@ function spawnChest() {
     const dist = CHEST_SPAWN_DIST_MIN + Math.random() * (CHEST_SPAWN_DIST_MAX - CHEST_SPAWN_DIST_MIN);
     let cx = player.x + Math.cos(angle) * dist;
     let cy = player.y + Math.sin(angle) * dist;
-    chests.push({ x: cx, y: cy, width: CHEST_WIDTH, height: CHEST_HEIGHT });
+    
+    // Roll rarity based on weighted odds (#46)
+    const roll = Math.random();
+    let rarity, rewardCount;
+    if (roll < 0.70) {
+        rarity = CHEST_RARITY_COMMON;
+        rewardCount = 1;
+    } else if (roll < 0.95) {
+        rarity = CHEST_RARITY_UNCOMMON;
+        rewardCount = 3;
+    } else {
+        rarity = CHEST_RARITY_RARE;
+        rewardCount = 5;
+    }
+    
+    chests.push({ x: cx, y: cy, width: CHEST_WIDTH, height: CHEST_HEIGHT, rarity: rarity, rewardCount: rewardCount });
 }
 
 function updateChests(dt) {
@@ -1185,23 +1210,43 @@ function updateChests(dt) {
         const dx = player.x - closestX;
         const dy = player.y - closestY;
         if (dx * dx + dy * dy < player.radius * player.radius) {
-            // Collect chest - spawn rewards
-            const rewardCount = CHEST_REWARD_MIN + Math.floor(Math.random() * (CHEST_REWARD_MAX - CHEST_REWARD_MIN + 1));
-            for (let r = 0; r < rewardCount; r++) {
-                const angle = (r / rewardCount) * Math.PI * 2 + Math.random() * 0.3;
-                const speed = 80 + Math.random() * 60;
-                const gemValue = XP_BASE_VALUE * (1 + Math.floor(Math.random() * 3));
-                const gem = {
+            // Collect chest - award upgrades from owned pool (#46)
+            const ownedUpgrades = POWERUPS.filter(function(p) { return (p.level || 0) > 0; });
+            
+            if (ownedUpgrades.length > 0) {
+                // Award rewardCount upgrades from owned pool (with replacement)
+                for (let r = 0; r < chest.rewardCount; r++) {
+                    const upgrade = ownedUpgrades[Math.floor(Math.random() * ownedUpgrades.length)];
+                    upgrade.apply();
+                }
+                // Floating text feedback
+                particles.push({
+                    type: 'damage_number',
                     x: chest.x,
-                    y: chest.y,
-                    radius: XP_GEM_RADIUS,
-                    color: XP_GEM_COLOR,
-                    value: gemValue,
-                    popVx: Math.cos(angle) * speed,
-                    popVy: Math.sin(angle) * speed,
-                    popTimer: 0.4,
-                };
-                xpGems.push(gem);
+                    y: chest.y - 20,
+                    text: '+' + chest.rewardCount + ' upgrades!',
+                    color: '#ffcc00',
+                    lifetime: 1.0,
+                    maxLifetime: 1.0,
+                });
+            } else {
+                // Fallback: spawn XP gems if no owned upgrades (#46)
+                for (let r = 0; r < chest.rewardCount; r++) {
+                    const angle = (r / chest.rewardCount) * Math.PI * 2 + Math.random() * 0.3;
+                    const speed = 80 + Math.random() * 60;
+                    const gemValue = XP_BASE_VALUE * (1 + Math.floor(Math.random() * 3));
+                    const gem = {
+                        x: chest.x,
+                        y: chest.y,
+                        radius: XP_GEM_RADIUS,
+                        color: XP_GEM_COLOR,
+                        value: gemValue,
+                        popVx: Math.cos(angle) * speed,
+                        popVy: Math.sin(angle) * speed,
+                        popTimer: 0.4,
+                    };
+                    xpGems.push(gem);
+                }
             }
             // Sparkle particles
             for (let s = 0; s < 8; s++) {
@@ -1219,6 +1264,53 @@ function updateChests(dt) {
                     maxLifetime: 0.5,
                 });
             }
+            // #46 Celebration for uncommon/rare chests
+            if (chest.rarity === CHEST_RARITY_UNCOMMON || chest.rarity === CHEST_RARITY_RARE) {
+                if (typeof Sound !== 'undefined' && Sound.playChestOpen) Sound.playChestOpen();
+                const isRare = chest.rarity === CHEST_RARITY_RARE;
+                game.shakeTimer = isRare ? 0.5 : 0.25;
+                game.shakeMagnitude = isRare ? 8 : 4;
+                const palette = isRare
+                    ? ['#ffd700', '#ffa500', '#cc44ff', '#ff44cc', '#ffffff']
+                    : ['#44ffff', '#44aaff', '#44ff88', '#88ffcc', '#ffffff'];
+                const confettiCount = isRare ? 40 : 20;
+                for (let c = 0; c < confettiCount; c++) {
+                    const cAngle = Math.random() * Math.PI * 2;
+                    const cSpeed = 80 + Math.random() * 140;
+                    particles.push({
+                        type: 'confetti',
+                        x: chest.x,
+                        y: chest.y,
+                        vx: Math.cos(cAngle) * cSpeed,
+                        vy: Math.sin(cAngle) * cSpeed - 80,
+                        color: palette[Math.floor(Math.random() * palette.length)],
+                        w: 5 + Math.random() * 4,
+                        h: 3 + Math.random() * 3,
+                        rotation: Math.random() * Math.PI * 2,
+                        rotSpeed: (Math.random() - 0.5) * 10,
+                        lifetime: 1.2 + Math.random() * 0.4,
+                        maxLifetime: 1.6,
+                    });
+                }
+                if (isRare) {
+                    const sparkleCount = 12;
+                    for (let s2 = 0; s2 < sparkleCount; s2++) {
+                        const sAngle = (s2 / sparkleCount) * Math.PI * 2 + Math.random() * 0.2;
+                        const sSpeed = 60 + Math.random() * 80;
+                        particles.push({
+                            type: 'sparkle',
+                            x: chest.x,
+                            y: chest.y,
+                            vx: Math.cos(sAngle) * sSpeed,
+                            vy: Math.sin(sAngle) * sSpeed,
+                            color: ['#ffd700', '#cc44ff', '#ff44cc', '#ffffff'][s2 % 4],
+                            size: 6 + Math.random() * 5,
+                            lifetime: 0.7,
+                            maxLifetime: 0.7,
+                        });
+                    }
+                }
+            }
             chests.splice(i, 1);
         }
     }
@@ -1227,30 +1319,101 @@ function updateChests(dt) {
 function renderChests() {
     for (const chest of chests) {
         const sp = worldToScreen(chest.x, chest.y);
-        const w = chest.width;
-        const h = chest.height;
+        const rarity = chest.rarity || CHEST_RARITY_COMMON;
+        const isRare = rarity === CHEST_RARITY_RARE;
+        const isUncommon = rarity === CHEST_RARITY_UNCOMMON;
+        const scale = isRare ? 1.15 : 1.0;
+        const w = chest.width * scale;
+        const h = chest.height * scale;
         const x = sp.x - w / 2;
         const y = sp.y - h / 2;
+        const t = game.survivalTime;
 
-        // Chest body (brown)
-        ctx.fillStyle = '#8B4513';
+        // Tier palette (#46)
+        let bodyColor = '#8B4513';
+        let lidColor = '#6B3410';
+        let trimColor = '#FFD700';
+        let glowColor = '#FFD700';
+        let glowBase = 8;
+        let glowPulse = 4;
+        if (isUncommon) {
+            bodyColor = '#2d6b4a';
+            lidColor = '#1f4d79';
+            trimColor = '#66ffcc';
+            glowColor = '#44ddff';
+            glowBase = 14;
+            glowPulse = 6;
+        } else if (isRare) {
+            bodyColor = '#5a2a8a';
+            lidColor = '#3d1a66';
+            trimColor = '#ffd700';
+            glowColor = '#cc66ff';
+            glowBase = 22;
+            glowPulse = 10;
+        }
+
+        // Outer glow halo (uncommon/rare)
+        if (isUncommon || isRare) {
+            ctx.save();
+            ctx.shadowColor = glowColor;
+            ctx.shadowBlur = glowBase + glowPulse * (0.5 + 0.5 * Math.sin(t * 4));
+            ctx.fillStyle = glowColor;
+            ctx.globalAlpha = 0.22;
+            ctx.fillRect(x - 4, y - 4, w + 8, h + 8);
+            ctx.restore();
+        }
+
+        // Chest body
+        ctx.fillStyle = bodyColor;
         ctx.fillRect(x, y + 4, w, h - 4);
 
-        // Chest lid (darker brown)
-        ctx.fillStyle = '#6B3410';
+        // Lid
+        ctx.fillStyle = lidColor;
         ctx.fillRect(x - 2, y, w + 4, 8);
 
-        // Gold trim
-        ctx.fillStyle = '#FFD700';
-        ctx.fillRect(x + w / 2 - 4, y + 2, 8, 6);  // lid clasp
+        // Trim
+        ctx.fillStyle = trimColor;
+        ctx.fillRect(x + w / 2 - 4, y + 2, 8, 6);  // clasp
         ctx.fillRect(x + 2, y + h / 2 + 2, w - 4, 3);  // body band
 
-        // Glow effect
-        ctx.shadowColor = '#FFD700';
-        ctx.shadowBlur = 8 + 4 * Math.sin(game.survivalTime * 3);
-        ctx.fillStyle = '#FFD700';
+        // Shimmer stripe (uncommon/rare)
+        if (isUncommon || isRare) {
+            const shimmer = 0.4 + 0.6 * Math.abs(Math.sin(t * 5));
+            ctx.save();
+            ctx.globalAlpha = shimmer;
+            ctx.fillStyle = isRare ? '#ffe680' : '#b6fff0';
+            ctx.fillRect(x + 2, y + 1, w - 4, 2);
+            ctx.restore();
+        }
+
+        // Central clasp glow
+        ctx.save();
+        ctx.shadowColor = glowColor;
+        ctx.shadowBlur = glowBase + glowPulse * Math.sin(t * 3);
+        ctx.fillStyle = glowColor;
         ctx.fillRect(x + w / 2 - 3, y + 3, 6, 4);
-        ctx.shadowBlur = 0;
+        ctx.restore();
+
+        // Orbiting sparkle dots for rare
+        if (isRare) {
+            const cx = sp.x;
+            const cy = sp.y;
+            const orbitR = Math.max(w, h) * 0.85;
+            const sparkleColors = ['#ffd700', '#cc66ff', '#ff66cc'];
+            for (let i = 0; i < 3; i++) {
+                const a = t * 2.2 + (i * Math.PI * 2) / 3;
+                const px = cx + Math.cos(a) * orbitR;
+                const py = cy + Math.sin(a) * orbitR * 0.5;
+                ctx.save();
+                ctx.shadowColor = sparkleColors[i];
+                ctx.shadowBlur = 10;
+                ctx.fillStyle = sparkleColors[i];
+                ctx.beginPath();
+                ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
     }
 }
 
@@ -1506,6 +1669,11 @@ function update(dt) {
         if (p.lifetime <= 0) {
             particles.splice(i, 1);
             continue;
+        }
+        // #46 Confetti gravity + rotation
+        if (p.type === 'confetti') {
+            if (p.vy !== undefined) p.vy += 200 * dt;
+            if (p.rotSpeed !== undefined) p.rotation = (p.rotation || 0) + p.rotSpeed * dt;
         }
         if (p.vx !== undefined) p.x += p.vx * dt;
         if (p.vy !== undefined) p.y += p.vy * dt;
@@ -1798,6 +1966,38 @@ function render() {
             ctx.globalAlpha = alpha;
             ctx.fillStyle = p.color;
             ctx.fillRect(psp.x - p.size / 2, psp.y - p.size / 2, p.size, p.size);
+            ctx.globalAlpha = 1;
+        } else if (p.type === 'confetti') {
+            const psp = worldToScreen(p.x, p.y);
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.translate(psp.x, psp.y);
+            ctx.rotate(p.rotation || 0);
+            ctx.fillStyle = p.color;
+            ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+            ctx.restore();
+            ctx.globalAlpha = 1;
+        } else if (p.type === 'sparkle') {
+            const psp = worldToScreen(p.x, p.y);
+            const grow = 1 + (1 - alpha) * 1.5;
+            const r = (p.size || 6) * grow * 0.5;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.strokeStyle = p.color;
+            ctx.lineWidth = 2;
+            ctx.shadowColor = p.color;
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.moveTo(psp.x - r, psp.y);
+            ctx.lineTo(psp.x + r, psp.y);
+            ctx.moveTo(psp.x, psp.y - r);
+            ctx.lineTo(psp.x, psp.y + r);
+            ctx.moveTo(psp.x - r * 0.7, psp.y - r * 0.7);
+            ctx.lineTo(psp.x + r * 0.7, psp.y + r * 0.7);
+            ctx.moveTo(psp.x - r * 0.7, psp.y + r * 0.7);
+            ctx.lineTo(psp.x + r * 0.7, psp.y - r * 0.7);
+            ctx.stroke();
+            ctx.restore();
             ctx.globalAlpha = 1;
         }
     }
