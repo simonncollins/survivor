@@ -135,6 +135,13 @@ const CHEST_RARITY_WEIGHTS = [
     { rarity: CHEST_RARITY_RARE, weight: 0.05, rewardCount: 5 },
 ];
 
+// Reward Dialog layout (#54)
+const REWARD_DIALOG_PADDING = 20;
+const REWARD_DIALOG_ITEM_HEIGHT = 60;
+const REWARD_DIALOG_ITEM_GAP = 10;
+const REWARD_DIALOG_MAX_WIDTH = 500;
+const REWARD_DIALOG_CELEBRATION_DURATION = 3.0;
+
 // --------------- Canvas Setup ---------------
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -152,23 +159,11 @@ window.addEventListener('resize', function() {
         var savedPowerups = levelUpCards.map(function(c) { return c.powerup; });
         generateLevelUpCardsFromPowerups(savedPowerups);
     }
-});
-resizeCanvas();
-
-// --------------- Pointer Detection (#52) ---------------
-const finePointerQuery = window.matchMedia('(pointer: fine)');
-let hasFinePointer = finePointerQuery.matches;
-let mouseOverCanvas = false;
-let currentMouseX = 0;
-let currentMouseY = 0;
-
-finePointerQuery.addEventListener('change', function(e) {
-    hasFinePointer = e.matches;
-    if (!hasFinePointer) {
-        // Switching to coarse pointer: stop mouse follow
-        mouseOverCanvas = false;
+    if (game && game.state === 'PAUSED_CHEST' && rewardDialog) {
+        layoutRewardDialog();
     }
 });
+resizeCanvas();
 
 // --------------- Sound Manager (Web Audio API) (#28) ---------------
 const Sound = (function() {
@@ -578,13 +573,14 @@ const POWERUPS = [
 
 // --------------- Game State ---------------
 let game, player, enemies, projectiles, xpGems, particles, levelUpCards, chests, explosions, beams;
+let rewardDialog = null; // { upgrades: [...], headerText: string, celebrationRarity: string, openTime: number }
 let selectedPowerupIndex = -1;
 let levelUpOpenTime = 0;
 let enemyIdCounter = 0;
 
 function resetGameState() {
     game = {
-        state: 'MENU', // MENU, PLAYING, PAUSED_LEVELUP, GAME_OVER
+        state: 'MENU', // MENU, PLAYING, PAUSED_LEVELUP, PAUSED_CHEST, GAME_OVER
         lastTime: 0,
         camera: { x: 0, y: 0 },
         enemySpawnTimer: 0,
@@ -901,58 +897,23 @@ function spawnXpGem(x, y, value) {
     });
 }
 
-// --------------- Shuffle Helper (#53) ---------------
-function shuffleArray(array) {
-    const arr = array.slice();
-    for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-}
-
-// --------------- Level Up Cards (#10, #53) ---------------
+// --------------- Level Up Cards (#10) ---------------
 function generateLevelUpCards() {
     levelUpCards = [];
     selectedPowerupIndex = -1;
     levelUpOpenTime = performance.now();
 
-    // Filter eligible powerups (not maxed out, meets unlock prerequisites)
-    // Currently no max levels or unlock prerequisites are defined, so all are eligible
-    const eligiblePowerups = POWERUPS.filter(function(p) {
-        // Add any future max level or unlock checks here
-        return true;
-    });
-
-    // If pool is empty, skip level-up UI and auto-resume gameplay
-    if (eligiblePowerups.length === 0) {
-        game.state = 'PLAYING';
-        return;
-    }
-
-    // Shuffle and sample without replacement (up to 3)
-    const shuffled = shuffleArray(eligiblePowerups);
-    const selectedPowerups = shuffled.slice(0, Math.min(3, shuffled.length));
-
-    // Invariant: no duplicates within the same level-up event
-    const uniqueIds = new Set(selectedPowerups.map(function(p) { return p.id; }));
-    if (uniqueIds.size !== selectedPowerups.length) {
-        throw new Error('Invariant violated: duplicate powerups in level-up cards');
-    }
-
-    const cardCount = selectedPowerups.length;
-
     if (isPortrait) {
         // Portrait/mobile: stack cards vertically with smaller dimensions
         const cardW = Math.min(CARD_WIDTH, canvas.width * 0.7);
-        const cardH = Math.min(120, (canvas.height - 220) / Math.max(cardCount, 1) - 12);
+        const cardH = Math.min(120, (canvas.height - 220) / CARD_COUNT - 12);
         const gap = 12;
-        const totalHeight = cardCount * cardH + (cardCount - 1) * gap;
+        const totalHeight = CARD_COUNT * cardH + (CARD_COUNT - 1) * gap;
         const startX = (canvas.width - cardW) / 2;
         const startY = (canvas.height - totalHeight) / 2 + 30;
 
-        for (let i = 0; i < cardCount; i++) {
-            const powerup = selectedPowerups[i];
+        for (let i = 0; i < CARD_COUNT; i++) {
+            const powerup = POWERUPS[Math.floor(Math.random() * POWERUPS.length)];
             const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
                 x: startX,
@@ -966,12 +927,12 @@ function generateLevelUpCards() {
         }
     } else {
         // Landscape/desktop: horizontal row
-        const totalWidth = cardCount * CARD_WIDTH + (cardCount - 1) * CARD_GAP;
+        const totalWidth = CARD_COUNT * CARD_WIDTH + (CARD_COUNT - 1) * CARD_GAP;
         const startX = (canvas.width - totalWidth) / 2;
         const startY = (canvas.height - CARD_HEIGHT) / 2;
 
-        for (let i = 0; i < cardCount; i++) {
-            const powerup = selectedPowerups[i];
+        for (let i = 0; i < CARD_COUNT; i++) {
+            const powerup = POWERUPS[Math.floor(Math.random() * POWERUPS.length)];
             const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
                 x: startX + i * (CARD_WIDTH + CARD_GAP),
@@ -991,19 +952,15 @@ function generateLevelUpCardsFromPowerups(powerups) {
     selectedPowerupIndex = -1;
     levelUpOpenTime = performance.now();
 
-    // Use powerups.length for layout (not CARD_COUNT) - preserves original card count on resize
-    const cardCount = powerups.length;
-    if (cardCount === 0) return;
-
     if (isPortrait) {
         const cardW = Math.min(CARD_WIDTH, canvas.width * 0.7);
-        const cardH = Math.min(120, (canvas.height - 220) / Math.max(cardCount, 1) - 12);
+        const cardH = Math.min(120, (canvas.height - 220) / CARD_COUNT - 12);
         const gap = 12;
-        const totalHeight = cardCount * cardH + (cardCount - 1) * gap;
+        const totalHeight = CARD_COUNT * cardH + (CARD_COUNT - 1) * gap;
         const startX = (canvas.width - cardW) / 2;
         const startY = (canvas.height - totalHeight) / 2 + 30;
 
-        for (let i = 0; i < cardCount; i++) {
+        for (let i = 0; i < powerups.length; i++) {
             const powerup = powerups[i];
             const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
@@ -1017,11 +974,11 @@ function generateLevelUpCardsFromPowerups(powerups) {
             });
         }
     } else {
-        const totalWidth = cardCount * CARD_WIDTH + (cardCount - 1) * CARD_GAP;
+        const totalWidth = CARD_COUNT * CARD_WIDTH + (CARD_COUNT - 1) * CARD_GAP;
         const startX = (canvas.width - totalWidth) / 2;
         const startY = (canvas.height - CARD_HEIGHT) / 2;
 
-        for (let i = 0; i < cardCount; i++) {
+        for (let i = 0; i < powerups.length; i++) {
             const powerup = powerups[i];
             const levelLabel = powerup.level > 0 ? 'Lv ' + powerup.level + ' → Lv ' + (powerup.level + 1) : '';
             levelUpCards.push({
@@ -1071,6 +1028,148 @@ function handleLevelUpClick(clickX, clickY) {
     return false;
 }
 
+// --------------- Reward Dialog (#54) ---------------
+function showRewardDialog(reward) {
+    // reward = { upgrades: [...], headerText: string, celebrationRarity: 'common'|'uncommon'|'rare' }
+    game.state = 'PAUSED_CHEST';
+    rewardDialog = {
+        upgrades: reward.upgrades || [],
+        headerText: reward.headerText || 'CHEST REWARD',
+        celebrationRarity: reward.celebrationRarity || 'common',
+        openTime: performance.now(),
+    };
+    layoutRewardDialog();
+    triggerRewardCelebration(reward.celebrationRarity);
+}
+
+function layoutRewardDialog() {
+    if (!rewardDialog) return;
+    const upgradeCount = rewardDialog.upgrades.length;
+    if (upgradeCount === 0) return;
+
+    const small = canvas.width < 600;
+    const dialogWidth = Math.min(REWARD_DIALOG_MAX_WIDTH, canvas.width - 40);
+    const itemHeight = small ? 50 : REWARD_DIALOG_ITEM_HEIGHT;
+    const itemGap = small ? 8 : REWARD_DIALOG_ITEM_GAP;
+    const padding = small ? 16 : REWARD_DIALOG_PADDING;
+
+    // Calculate grid layout: 2 columns for 4-5 items, 1 column for fewer
+    const cols = (isPortrait && upgradeCount >= 4) ? 2 : (upgradeCount > 3 ? 2 : 1);
+    const rows = Math.ceil(upgradeCount / cols);
+
+    const contentWidth = dialogWidth - padding * 2;
+    const itemWidth = cols === 1 ? contentWidth : (contentWidth - itemGap) / 2;
+
+    rewardDialog.layout = {
+        dialogWidth: dialogWidth,
+        itemWidth: itemWidth,
+        itemHeight: itemHeight,
+        itemGap: itemGap,
+        padding: padding,
+        cols: cols,
+        rows: rows,
+    };
+
+    // Calculate dialog height based on content
+    const headerHeight = small ? 60 : 80;
+    const contentHeight = rows * itemHeight + (rows - 1) * itemGap;
+    const buttonHeight = small ? 50 : 60;
+    const dialogHeight = headerHeight + contentHeight + buttonHeight + padding * 2;
+
+    rewardDialog.layout.dialogHeight = dialogHeight;
+    rewardDialog.layout.x = (canvas.width - dialogWidth) / 2;
+    rewardDialog.layout.y = (canvas.height - dialogHeight) / 2;
+    rewardDialog.layout.headerHeight = headerHeight;
+    rewardDialog.layout.buttonY = rewardDialog.layout.y + headerHeight + contentHeight + padding;
+}
+
+function triggerRewardCelebration(rarity) {
+    if (rarity === CHEST_RARITY_COMMON) return;
+    if (typeof Sound !== 'undefined' && Sound.playChestOpen) Sound.playChestOpen();
+
+    const isRare = rarity === CHEST_RARITY_RARE;
+    game.shakeTimer = isRare ? 0.5 : 0.25;
+    game.shakeMagnitude = isRare ? 8 : 4;
+
+    const palette = isRare
+        ? ['#ffd700', '#ffa500', '#cc44ff', '#ff44cc', '#ffffff']
+        : ['#44ffff', '#44aaff', '#44ff88', '#88ffcc', '#ffffff'];
+    const confettiCount = isRare ? 40 : 20;
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+
+    for (let c = 0; c < confettiCount; c++) {
+        const cAngle = Math.random() * Math.PI * 2;
+        const cSpeed = 80 + Math.random() * 140;
+        particles.push({
+            type: 'confetti',
+            x: centerX,
+            y: centerY,
+            vx: Math.cos(cAngle) * cSpeed,
+            vy: Math.sin(cAngle) * cSpeed - 80,
+            color: palette[Math.floor(Math.random() * palette.length)],
+            w: 5 + Math.random() * 4,
+            h: 3 + Math.random() * 3,
+            rotation: Math.random() * Math.PI * 2,
+            rotSpeed: (Math.random() - 0.5) * 10,
+            lifetime: REWARD_DIALOG_CELEBRATION_DURATION * (0.8 + Math.random() * 0.4),
+            maxLifetime: REWARD_DIALOG_CELEBRATION_DURATION * 1.2,
+        });
+    }
+
+    if (isRare) {
+        const sparkleCount = 12;
+        for (let s = 0; s < sparkleCount; s++) {
+            const sAngle = (s / sparkleCount) * Math.PI * 2 + Math.random() * 0.2;
+            const sSpeed = 60 + Math.random() * 80;
+            particles.push({
+                type: 'sparkle',
+                x: centerX,
+                y: centerY,
+                vx: Math.cos(sAngle) * sSpeed,
+                vy: Math.sin(sAngle) * sSpeed,
+                color: ['#ffd700', '#cc44ff', '#ff44cc', '#ffffff'][s % 4],
+                size: 6 + Math.random() * 5,
+                lifetime: REWARD_DIALOG_CELEBRATION_DURATION * 0.7,
+                maxLifetime: REWARD_DIALOG_CELEBRATION_DURATION * 0.7,
+            });
+        }
+    }
+}
+
+function handleRewardDialogClick(clickX, clickY) {
+    if (!rewardDialog || !rewardDialog.layout) return false;
+    // Guard against stray clicks when dialog just opened (200ms)
+    if (performance.now() - rewardDialog.openTime < 200) return false;
+
+    const layout = rewardDialog.layout;
+    const small = canvas.width < 600;
+    const btnW = small ? 140 : 180;
+    const btnH = small ? 36 : 44;
+    const btnX = canvas.width / 2 - btnW / 2;
+    const btnY = layout.buttonY + (small ? 8 : 10);
+
+    if (clickX >= btnX && clickX <= btnX + btnW &&
+        clickY >= btnY && clickY <= btnY + btnH) {
+        closeRewardDialog();
+        return true;
+    }
+    return false;
+}
+
+function closeRewardDialog() {
+    rewardDialog = null;
+    game.state = 'PLAYING';
+}
+
+function dismissRewardDialogWithKeyboard() {
+    if (!rewardDialog) return false;
+    // Guard against early dismissal
+    if (performance.now() - rewardDialog.openTime < 200) return false;
+    closeRewardDialog();
+    return true;
+}
+
 // --------------- Input ---------------
 let isDragging = false;
 
@@ -1098,6 +1197,11 @@ function handleGameClick(screenX, screenY) {
         return;
     }
 
+    if (game.state === 'PAUSED_CHEST') {
+        handleRewardDialogClick(screenX, screenY);
+        return;
+    }
+
     if (game.state === 'PLAYING') {
         const worldClickX = screenX + game.camera.x;
         const worldClickY = screenY + game.camera.y;
@@ -1113,22 +1217,18 @@ canvas.addEventListener('mousedown', function(e) {
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
 
-    if (game.state === 'MENU' || game.state === 'GAME_OVER' || game.state === 'PAUSED_LEVELUP') {
+    if (game.state === 'MENU' || game.state === 'GAME_OVER' || game.state === 'PAUSED_LEVELUP' || game.state === 'PAUSED_CHEST') {
         handleGameClick(sx, sy);
         return;
     }
 
     if (game.state === 'PLAYING') {
-        // On fine-pointer devices, click is disabled for movement (use mouse-follow instead)
-        // On coarse-pointer devices, keep existing drag-to-move behavior
-        if (!hasFinePointer) {
-            isDragging = true;
-            const worldX = sx + game.camera.x;
-            const worldY = sy + game.camera.y;
-            player.targetX = worldX;
-            player.targetY = worldY;
-            player.moving = true;
-        }
+        isDragging = true;
+        const worldX = sx + game.camera.x;
+        const worldY = sy + game.camera.y;
+        player.targetX = worldX;
+        player.targetY = worldY;
+        player.moving = true;
     }
 });
 
@@ -1136,10 +1236,6 @@ canvas.addEventListener('mousemove', function(e) {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-
-    // Track mouse position for fine-pointer follow
-    currentMouseX = mx;
-    currentMouseY = my;
 
     // Hover detection for level-up cards
     if (game.state === 'PAUSED_LEVELUP') {
@@ -1149,17 +1245,8 @@ canvas.addEventListener('mousemove', function(e) {
         }
     }
 
-    // Fine-pointer: continuous follow while mouse is over canvas (and not paused)
-    if (hasFinePointer && mouseOverCanvas && game.state === 'PLAYING') {
-        const worldX = mx + game.camera.x;
-        const worldY = my + game.camera.y;
-        player.targetX = worldX;
-        player.targetY = worldY;
-        player.moving = true;
-    }
-
-    // Coarse-pointer: drag-to-move (existing behavior)
-    if (!hasFinePointer && isDragging && game.state === 'PLAYING') {
+    // Drag-to-move: update target while dragging (guard against paused states)
+    if (isDragging && game.state === 'PLAYING') {
         const worldX = mx + game.camera.x;
         const worldY = my + game.camera.y;
         player.targetX = worldX;
@@ -1172,26 +1259,6 @@ canvas.addEventListener('mouseup', function() {
     isDragging = false;
 });
 
-canvas.addEventListener('mouseenter', function() {
-    mouseOverCanvas = true;
-});
-
-canvas.addEventListener('mouseleave', function() {
-    mouseOverCanvas = false;
-    // Stop movement on mouse leave (hold last target with zero-length vector)
-    if (hasFinePointer && game.state === 'PLAYING') {
-        player.moving = false;
-    }
-});
-
-// Handle blur (window loses focus) - stop movement
-window.addEventListener('blur', function() {
-    mouseOverCanvas = false;
-    if (game && game.state === 'PLAYING') {
-        player.moving = false;
-    }
-});
-
 // --- Touch events (#18, #24) ---
 canvas.addEventListener('touchstart', function(e) {
     e.preventDefault();
@@ -1200,7 +1267,7 @@ canvas.addEventListener('touchstart', function(e) {
     const sx = touch.clientX - rect.left;
     const sy = touch.clientY - rect.top;
 
-    if (game.state === 'MENU' || game.state === 'GAME_OVER' || game.state === 'PAUSED_LEVELUP') {
+    if (game.state === 'MENU' || game.state === 'GAME_OVER' || game.state === 'PAUSED_LEVELUP' || game.state === 'PAUSED_CHEST') {
         handleGameClick(sx, sy);
         return;
     }
@@ -1232,6 +1299,28 @@ canvas.addEventListener('touchend', function(e) {
     e.preventDefault();
     isDragging = false;
 }, { passive: false });
+
+// --------------- Keyboard Input (#54) ---------------
+window.addEventListener('keydown', function(e) {
+    if (game.state === 'PAUSED_CHEST') {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            dismissRewardDialogWithKeyboard();
+        }
+    }
+    if (game.state === 'PAUSED_LEVELUP') {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            // Simulate confirm button click if a card is selected
+            if (selectedPowerupIndex >= 0 && levelUpCards.length > 0) {
+                levelUpCards[selectedPowerupIndex].powerup.apply();
+                game.state = 'PLAYING';
+                levelUpCards = [];
+                selectedPowerupIndex = -1;
+            }
+        }
+    }
+});
 
 // --------------- Update ---------------
 // --------------- Enemy Soft Collision (#29) ---------------
@@ -1301,25 +1390,17 @@ function updateChests(dt) {
         const dx = player.x - closestX;
         const dy = player.y - closestY;
         if (dx * dx + dy * dy < player.radius * player.radius) {
-            // Collect chest - award upgrades from owned pool (#46)
+            // Collect chest - award upgrades from owned pool (#46, #54)
             const ownedUpgrades = POWERUPS.filter(function(p) { return (p.level || 0) > 0; });
-            
+            const awardedUpgrades = [];
+
             if (ownedUpgrades.length > 0) {
                 // Award rewardCount upgrades from owned pool (with replacement)
                 for (let r = 0; r < chest.rewardCount; r++) {
                     const upgrade = ownedUpgrades[Math.floor(Math.random() * ownedUpgrades.length)];
                     upgrade.apply();
+                    awardedUpgrades.push(upgrade);
                 }
-                // Floating text feedback
-                particles.push({
-                    type: 'damage_number',
-                    x: chest.x,
-                    y: chest.y - 20,
-                    text: '+' + chest.rewardCount + ' upgrades!',
-                    color: '#ffcc00',
-                    lifetime: 1.0,
-                    maxLifetime: 1.0,
-                });
             } else {
                 // Fallback: spawn XP gems if no owned upgrades (#46)
                 for (let r = 0; r < chest.rewardCount; r++) {
@@ -1339,7 +1420,8 @@ function updateChests(dt) {
                     xpGems.push(gem);
                 }
             }
-            // Sparkle particles
+
+            // Sparkle particles at pickup location
             for (let s = 0; s < 8; s++) {
                 const pAngle = Math.random() * Math.PI * 2;
                 const pSpeed = 60 + Math.random() * 80;
@@ -1355,53 +1437,16 @@ function updateChests(dt) {
                     maxLifetime: 0.5,
                 });
             }
-            // #46 Celebration for uncommon/rare chests
-            if (chest.rarity === CHEST_RARITY_UNCOMMON || chest.rarity === CHEST_RARITY_RARE) {
-                if (typeof Sound !== 'undefined' && Sound.playChestOpen) Sound.playChestOpen();
-                const isRare = chest.rarity === CHEST_RARITY_RARE;
-                game.shakeTimer = isRare ? 0.5 : 0.25;
-                game.shakeMagnitude = isRare ? 8 : 4;
-                const palette = isRare
-                    ? ['#ffd700', '#ffa500', '#cc44ff', '#ff44cc', '#ffffff']
-                    : ['#44ffff', '#44aaff', '#44ff88', '#88ffcc', '#ffffff'];
-                const confettiCount = isRare ? 40 : 20;
-                for (let c = 0; c < confettiCount; c++) {
-                    const cAngle = Math.random() * Math.PI * 2;
-                    const cSpeed = 80 + Math.random() * 140;
-                    particles.push({
-                        type: 'confetti',
-                        x: chest.x,
-                        y: chest.y,
-                        vx: Math.cos(cAngle) * cSpeed,
-                        vy: Math.sin(cAngle) * cSpeed - 80,
-                        color: palette[Math.floor(Math.random() * palette.length)],
-                        w: 5 + Math.random() * 4,
-                        h: 3 + Math.random() * 3,
-                        rotation: Math.random() * Math.PI * 2,
-                        rotSpeed: (Math.random() - 0.5) * 10,
-                        lifetime: 1.2 + Math.random() * 0.4,
-                        maxLifetime: 1.6,
-                    });
-                }
-                if (isRare) {
-                    const sparkleCount = 12;
-                    for (let s2 = 0; s2 < sparkleCount; s2++) {
-                        const sAngle = (s2 / sparkleCount) * Math.PI * 2 + Math.random() * 0.2;
-                        const sSpeed = 60 + Math.random() * 80;
-                        particles.push({
-                            type: 'sparkle',
-                            x: chest.x,
-                            y: chest.y,
-                            vx: Math.cos(sAngle) * sSpeed,
-                            vy: Math.sin(sAngle) * sSpeed,
-                            color: ['#ffd700', '#cc44ff', '#ff44cc', '#ffffff'][s2 % 4],
-                            size: 6 + Math.random() * 5,
-                            lifetime: 0.7,
-                            maxLifetime: 0.7,
-                        });
-                    }
-                }
-            }
+
+            // Show reward dialog (#54)
+            const rarityLabel = chest.rarity === CHEST_RARITY_COMMON ? 'Common' :
+                               (chest.rarity === CHEST_RARITY_UNCOMMON ? 'Uncommon' : 'Rare');
+            showRewardDialog({
+                upgrades: awardedUpgrades,
+                headerText: 'CHEST REWARD — ' + rarityLabel,
+                celebrationRarity: chest.rarity,
+            });
+
             chests.splice(i, 1);
         }
     }
@@ -1520,32 +1565,28 @@ function update(dt) {
         if (game.shakeTimer < 0) game.shakeTimer = 0;
     }
 
-    // Player movement (#2, #52)
+    // Player movement (#2)
     if (player.moving) {
         const dx = player.targetX - player.x;
         const dy = player.targetY - player.y;
         const d = Math.sqrt(dx * dx + dy * dy);
-        const step = player.speed * dt;
 
-        // Anti-jitter: snap to target when distance is less than per-frame step
-        if (d < step) {
+        if (d < 2) {
             player.x = player.targetX;
             player.y = player.targetY;
-            // On fine-pointer, keep moving toward mouse; on coarse-pointer, stop
-            if (!hasFinePointer || !mouseOverCanvas) {
-                player.moving = false;
-            }
-        } else if (d < 2) {
-            // Legacy small-distance snap
-            player.x = player.targetX;
-            player.y = player.targetY;
-            if (!hasFinePointer || !mouseOverCanvas) {
-                player.moving = false;
-            }
+            player.moving = false;
         } else {
-            player.x += (dx / d) * step;
-            player.y += (dy / d) * step;
+            const step = player.speed * dt;
+            if (step >= d) {
+                player.x = player.targetX;
+                player.y = player.targetY;
+                player.moving = false;
+            } else {
+                player.x += (dx / d) * step;
+                player.y += (dy / d) * step;
+            }
         }
+
     }
 
     // Enemy spawning (#3) with scaling (#12)
@@ -2108,6 +2149,10 @@ function render() {
     if (game.state === 'PAUSED_LEVELUP') {
         renderLevelUpScreen();
     }
+
+    if (game.state === 'PAUSED_CHEST') {
+        renderRewardDialog();
+    }
 }
 
 // --------------- Menu Screen (#15) ---------------
@@ -2312,6 +2357,167 @@ function renderLevelUpScreen() {
             ctx.fillText('Click a powerup to select, then confirm', canvas.width / 2, hintY);
         }
     }
+}
+
+// --------------- Reward Dialog Render (#54) ---------------
+function renderRewardDialog() {
+    if (!rewardDialog || !rewardDialog.layout) return;
+
+    const small = canvas.width < 600;
+    const layout = rewardDialog.layout;
+
+    // Backdrop
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Dialog panel
+    const px = layout.x;
+    const py = layout.y;
+    const pw = layout.dialogWidth;
+    const ph = layout.dialogHeight;
+    const pr = 12;
+
+    ctx.fillStyle = '#1a1a2a';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.moveTo(px + pr, py);
+    ctx.lineTo(px + pw - pr, py);
+    ctx.arcTo(px + pw, py, px + pw, py + pr, pr);
+    ctx.lineTo(px + pw, py + ph - pr);
+    ctx.arcTo(px + pw, py + ph, px + pw - pr, py + ph, pr);
+    ctx.lineTo(px + pr, py + ph);
+    ctx.arcTo(px, py + ph, px, py + ph - pr, pr);
+    ctx.lineTo(px, py + pr);
+    ctx.arcTo(px, py, px + pr, py, pr);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Rarity-coloured border
+    const rarityColors = {
+        common: '#888888',
+        uncommon: '#44ff44',
+        rare: '#ffdd44',
+    };
+    const rarityColor = rarityColors[rewardDialog.celebrationRarity] || '#888888';
+    ctx.strokeStyle = rarityColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Header
+    ctx.fillStyle = rarityColor;
+    ctx.font = 'bold ' + (small ? 22 : 32) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(rewardDialog.headerText, canvas.width / 2, py + (small ? 32 : 44));
+
+    // Rarity subtitle
+    const rarityLabel = rewardDialog.celebrationRarity.charAt(0).toUpperCase() +
+                        rewardDialog.celebrationRarity.slice(1);
+    ctx.fillStyle = '#cccccc';
+    ctx.font = (small ? 13 : 16) + 'px sans-serif';
+    ctx.fillText(rarityLabel + ' \u2014 ' + rewardDialog.upgrades.length + ' upgrade' +
+                 (rewardDialog.upgrades.length === 1 ? '' : 's'),
+                 canvas.width / 2, py + (small ? 50 : 68));
+
+    // Upgrade grid
+    const contentTop = py + layout.headerHeight;
+    const cols = layout.cols;
+    const itemWidth = layout.itemWidth;
+    const itemHeight = layout.itemHeight;
+    const itemGap = layout.itemGap;
+    const gridTotalWidth = cols * itemWidth + (cols - 1) * itemGap;
+    const gridStartX = px + (pw - gridTotalWidth) / 2;
+
+    for (let i = 0; i < rewardDialog.upgrades.length; i++) {
+        const up = rewardDialog.upgrades[i];
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const itemX = gridStartX + col * (itemWidth + itemGap);
+        const itemY = contentTop + row * (itemHeight + itemGap);
+
+        // Item background
+        ctx.fillStyle = '#2a2a3a';
+        ctx.fillRect(itemX, itemY, itemWidth, itemHeight);
+        ctx.strokeStyle = up.color || '#555555';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(itemX, itemY, itemWidth, itemHeight);
+
+        // Icon
+        const iconR = small ? 14 : 18;
+        const iconCx = itemX + iconR + (small ? 8 : 12);
+        const iconCy = itemY + itemHeight / 2;
+        ctx.fillStyle = up.color || '#888888';
+        ctx.beginPath();
+        ctx.arc(iconCx, iconCy, iconR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Name
+        const textX = iconCx + iconR + (small ? 8 : 12);
+        const nameSize = small ? 13 : 15;
+        const descSize = small ? 10 : 12;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold ' + nameSize + 'px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        const nameText = up.name + (typeof up.level === 'number' ? ' Lv ' + up.level : '');
+        ctx.fillText(nameText, textX, itemY + (small ? 20 : 24));
+
+        // Description (short, one line with ellipsis if needed)
+        ctx.fillStyle = '#aaaaaa';
+        ctx.font = descSize + 'px sans-serif';
+        let descText = '';
+        if (typeof up.describe === 'function') {
+            try { descText = up.describe(up.level || 0) || ''; } catch (e) { descText = ''; }
+        } else if (up.description) {
+            descText = up.description;
+        }
+        const maxTextWidth = itemX + itemWidth - textX - 6;
+        let shown = descText;
+        if (ctx.measureText(shown).width > maxTextWidth) {
+            while (shown.length > 1 && ctx.measureText(shown + '\u2026').width > maxTextWidth) {
+                shown = shown.slice(0, -1);
+            }
+            shown = shown + '\u2026';
+        }
+        ctx.fillText(shown, textX, itemY + (small ? 38 : 44));
+    }
+
+    // Confirm button
+    const btnW = small ? 140 : 180;
+    const btnH = small ? 36 : 44;
+    const btnX = canvas.width / 2 - btnW / 2;
+    const btnY = layout.buttonY + (small ? 8 : 10);
+    const br = 8;
+
+    ctx.fillStyle = rarityColor;
+    ctx.shadowColor = rarityColor;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.moveTo(btnX + br, btnY);
+    ctx.lineTo(btnX + btnW - br, btnY);
+    ctx.arcTo(btnX + btnW, btnY, btnX + btnW, btnY + br, br);
+    ctx.lineTo(btnX + btnW, btnY + btnH - br);
+    ctx.arcTo(btnX + btnW, btnY + btnH, btnX + btnW - br, btnY + btnH, br);
+    ctx.lineTo(btnX + br, btnY + btnH);
+    ctx.arcTo(btnX, btnY + btnH, btnX, btnY + btnH - br, br);
+    ctx.lineTo(btnX, btnY + br);
+    ctx.arcTo(btnX, btnY, btnX + br, btnY, br);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold ' + (small ? 16 : 20) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('CONTINUE', canvas.width / 2, btnY + btnH / 2 + (small ? 5 : 7));
+
+    // Hint text
+    ctx.fillStyle = '#666666';
+    ctx.font = (small ? 11 : 13) + 'px sans-serif';
+    ctx.fillText('Click / Tap / Enter to continue', canvas.width / 2, btnY + btnH + (small ? 16 : 20));
 }
 
 // --------------- HUD (#14) ---------------
